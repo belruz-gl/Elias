@@ -11,7 +11,9 @@ Ingresar usuario y contraseña
 """
 USERNAME = 'USERNAME'
 PASSWORD = 'PASSWORD'
-BASE_URL = "https://oficinajudicialvirtual.pjud.cl/home/"
+LOGIN_URL = "https://accounts.claveunica.gob.cl/accounts/login/?next=/openid/authorize%3Fclient_id%3Dd602a0071f3f4db8b37a87cffd89bf23%26redirect_uri%3Dhttps%253A%252F%252Foficinajudicialvirtual.pjud.cl%252Fclaveunica%252Freturn.php%253Fboton%253D1%26response_type%3Dcode%26scope%3Dopenid%2Brut%26state%3DeyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczpcL1wvb2ZpY2luYWp1ZGljaWFsdmlydHVhbC5wanVkLmNsIiwiYXVkIjoiaHR0cHM6XC9cL29maWNpbmFqdWRpY2lhbHZpcnR1YWwucGp1ZC5jbCIsImlhdCI6MTc0NTUwOTExMCwiZXhwIjoxNzQ1NTEwMDEwLCJkYXRhIjoiWW1uNzRYZVwvVmt1Z2hNeUl1S0VLUkx0RzhGOEpSdWt5eVBrMjdCeUNsdEk9In0.FBeGmLkfZMXocRwqAHbYsQ8VaTizzT1ccvKrpvxNjuk"
+
+
 
 def setup_driver():
     options = webdriver.ChromeOptions()
@@ -71,21 +73,11 @@ def main():
         print("Iniciando navegador...")
         driver = setup_driver()
         
-        # Abrir la página principal
-        print("Accediendo a la página principal...")
-        driver.get(BASE_URL)
+        # Accede a la página de login de Clave Única
+        print("Accediendo directamente a la página de login...")
+        driver.get(LOGIN_URL)
         
-        # Esperar y hacer clic en "Todos los servicios"
-        print("Buscando botón 'Todos los servicios'...")
-        todos_servicios_btn = wait_for_clickable(driver, (By.XPATH, "//button[contains(text(), 'Todos los servicios') or contains(@class, 'todos-servicios')]"))
-        todos_servicios_btn.click()
-        
-        # Esperar y hacer clic en "Clave Única"
-        print("Buscando opción 'Clave Única'...")
-        clave_unica_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(text(), 'Clave Única')]"))
-        clave_unica_btn.click()
-        
-        # Llamar a la función de login cuando ya estamos en la página de Clave Única
+        # Llama a la función de login
         login_success = login_to_pjud(driver)
         
         if login_success:
@@ -100,7 +92,6 @@ def main():
         print(f"Error en la ejecución principal: {str(e)}")
         # Aún con error, esperamos a que el usuario decida cerrar
         input("\nPresione Enter para cerrar el navegador...")
-
     finally:
         if driver:
             print("Cerrando el navegador...")
