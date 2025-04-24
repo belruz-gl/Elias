@@ -6,7 +6,7 @@ import time, os
 
 
 # URL_BASE
-LOGIN_URL = 'https://accounts.claveunica.gob.cl/accounts/login/?next=/openid/authorize%3Fclient_id%3D672f76fa24044d36b28fd11b50d7a4ec%26redirect_uri%3Dhttps%253A%252F%252Frsh.ministeriodesarrollosocial.gob.cl%252Facceso%252Fcallback%26response_type%3Dcode%26scope%3Dopenid%2520rut%26state%3D3ece9a112105ed3f5307e12b87a5a373'
+LOGIN_URL = 'https://accounts.claveunica.gob.cl/accounts/login/?next=/openid/authorize%3Fclient_id%3Dd602a0071f3f4db8b37a87cffd89bf23%26redirect_uri%3Dhttps%253A%252F%252Foficinajudicialvirtual.pjud.cl%252Fclaveunica%252Freturn.php%253Fboton%253D1%26response_type%3Dcode%26scope%3Dopenid%2Brut%26state%3DeyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczpcL1wvb2ZpY2luYWp1ZGljaWFsdmlydHVhbC5wanVkLmNsIiwiYXVkIjoiaHR0cHM6XC9cL29maWNpbmFqdWRpY2lhbHZpcnR1YWwucGp1ZC5jbCIsImlhdCI6MTc0NTQ2OTg5MSwiZXhwIjoxNzQ1NDcwNzkxLCJkYXRhIjoiWW1uNzRYZVwvVmt1Z2hNeUl1S0VLUkRNUFF0OWgrZjNYXC9xVmF3TzVnNFN3PSJ9.PAh_gTJhYO3slD5lZaH7fLdhhfYOJG2VvFLL8PZB4EA'
 
 #Datos del usuario
 USERNAME = REMOVED
