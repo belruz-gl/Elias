@@ -4,14 +4,19 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# Datos del usuario
-USERNAME = REMOVED
-PASSWORD = REMOVED
+# Variables globales
+"""
+Ingresar usuario y contraseña
+
+"""
+USERNAME = 'USERNAME'
+PASSWORD = 'PASSWORD'
+BASE_URL = "https://oficinajudicialvirtual.pjud.cl/home/"
 
 def setup_driver():
     options = webdriver.ChromeOptions()
     
-    # Configuración para mejor compatibilidad
+    # Configuración
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
@@ -32,26 +37,8 @@ def wait_for_clickable(driver, locator, timeout=30):
         EC.element_to_be_clickable(locator)
     )
 
-def login_to_pjud():
-    driver = None
+def login_to_pjud(driver):
     try:
-        print("Iniciando navegador...")
-        driver = setup_driver()
-        
-        # Abrir la página principal
-        print("Accediendo a la página principal...")
-        driver.get("https://oficinajudicialvirtual.pjud.cl/home/")
-        
-        # Esperar y hacer clic en "Todos los servicios"
-        print("Buscando botón 'Todos los servicios'...")
-        todos_servicios_btn = wait_for_clickable(driver, (By.XPATH, "//button[contains(text(), 'Todos los servicios') or contains(@class, 'todos-servicios')]"))
-        todos_servicios_btn.click()
-        
-        # Esperar y hacer clic en "Clave Única"
-        print("Buscando opción 'Clave Única'...")
-        clave_unica_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(text(), 'Clave Única')]"))
-        clave_unica_btn.click()
-        
         # Esperar a que cargue la página de Clave Única
         print("Esperando página de Clave Única...")
         username_field = wait_for_element(driver, (By.ID, 'uname'))
@@ -72,19 +59,52 @@ def login_to_pjud():
         wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual") or contains(@class, "user-profile")]'), 30)
         
         print("Inicio de sesión exitoso!")
-        
-        # Mantener la ventana abierta por un tiempo para ver el resultado
-        time.sleep(10)
-        
-        return driver
+        return True
         
     except Exception as e:
         print(f"Error durante el proceso de login: {str(e)}")
+        return False
 
-    
+def main():
+    driver = None
+    try:
+        print("Iniciando navegador...")
+        driver = setup_driver()
+        
+        # Abrir la página principal
+        print("Accediendo a la página principal...")
+        driver.get(BASE_URL)
+        
+        # Esperar y hacer clic en "Todos los servicios"
+        print("Buscando botón 'Todos los servicios'...")
+        todos_servicios_btn = wait_for_clickable(driver, (By.XPATH, "//button[contains(text(), 'Todos los servicios') or contains(@class, 'todos-servicios')]"))
+        todos_servicios_btn.click()
+        
+        # Esperar y hacer clic en "Clave Única"
+        print("Buscando opción 'Clave Única'...")
+        clave_unica_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(text(), 'Clave Única')]"))
+        clave_unica_btn.click()
+        
+        # Llamar a la función de login cuando ya estamos en la página de Clave Única
+        login_success = login_to_pjud(driver)
+        
+        if login_success:
+            print("Login completado con éxito")
+        else:
+            print("No se pudo completar el proceso de login")
+        
+        # Esperar a que el usuario presione Enter para cerrar el navegador
+        input("\nPresione Enter para cerrar el navegador...")
+            
+    except Exception as e:
+        print(f"Error en la ejecución principal: {str(e)}")
+        # Aún con error, esperamos a que el usuario decida cerrar
+        input("\nPresione Enter para cerrar el navegador...")
+
+    finally:
+        if driver:
+            print("Cerrando el navegador...")
+            driver.quit()
+            
 if __name__ == "__main__":
-    driver = login_to_pjud()
-    if driver:
-        print("Script ejecutado correctamente.")
-        input("Presione Enter para cerrar el navegador...")
-        driver.quit()
+    main()
