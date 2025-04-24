@@ -52,7 +52,7 @@ def login_to_pjud(driver):
         
         # Verificar que el login fue exitoso esperando algún elemento de la página tras el login
         print("Verificando inicio de sesión...")
-        wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual") or contains(@class, "user-profile")]'), 30)
+        wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual")]'), 30)
         
         print("Inicio de sesión exitoso!")
         return True
@@ -60,6 +60,64 @@ def login_to_pjud(driver):
     except Exception as e:
         print(f"Error durante el proceso de login: {str(e)}")
         return False
+
+def navigate_to_mis_causas(driver):
+    try:
+        print("Navegando a 'Mis Causas'...")
+        
+        mis_causas_link = wait_for_clickable(driver, (By.XPATH, "//a[contains(@onclick, 'misCausas')]"))
+        
+        # Ejecutar JavaScript directamente para llamar a la función misCausas()
+        driver.execute_script("misCausas();")
+        
+        # Esperar a que cargue la página de Mis Causas
+        print("Esperando que cargue la página de Mis Causas...")
+        time.sleep(3) 
+        
+        print("Navegación a 'Mis Causas' exitosa!")
+        return True
+        
+    except Exception as e:
+        print(f"Error al navegar a 'Mis Causas': {str(e)}")
+        # Intento alternativo haciendo clic directamente en el elemento
+        try:
+            print("Intentando método alternativo para 'Mis Causas'...")
+            mis_causas_link = driver.find_element(By.XPATH, "//a[contains(text(), 'Mis Causas')]")
+            driver.execute_script("arguments[0].click();", mis_causas_link)
+            time.sleep(3)
+            return True
+        except Exception as e2:
+            print(f"Error en el segundo intento: {str(e2)}")
+            return False
+
+def navigate_to_estado_diario(driver):
+    try:
+        print("Navegando a 'Mi Estado Diario'...")
+        
+        estado_diario_link = wait_for_clickable(driver, (By.XPATH, "//a[contains(@onclick, 'miEstadoDiario')]"))
+        
+        # Ejecutar JavaScript directamente para llamar a la función miEstadoDiario()
+        driver.execute_script("miEstadoDiario();")
+        
+        # Esperar a que cargue la página
+        print("Esperando que cargue la página de Mi Estado Diario...")
+        time.sleep(3) 
+        
+        print("Navegación a 'Mi Estado Diario' exitosa!")
+        return True
+        
+    except Exception as e:
+        print(f"Error al navegar a 'Mi Estado Diario': {str(e)}")
+        # Intento alternativo haciendo clic directamente en el elemento
+        try:
+            print("Intentando método alternativo para 'Mi Estado Diario'...")
+            estado_diario_link = driver.find_element(By.XPATH, "//a[contains(text(), 'Mi Estado Diario')]")
+            driver.execute_script("arguments[0].click();", estado_diario_link)
+            time.sleep(3)
+            return True
+        except Exception as e2:
+            print(f"Error en el segundo intento: {str(e2)}")
+            return False
 
 def main():
     driver = None
@@ -86,6 +144,19 @@ def main():
         
         if login_success:
             print("Login completado con éxito")
+            
+            # Dar un tiempo para que la página principal se cargue completamente
+            time.sleep(3)
+            
+            # Navegar a Mis Causas
+            navigate_to_mis_causas(driver)
+            
+            # Esperar un momento antes de navegar a otra sección
+            time.sleep(3)
+            
+            # Navegar a Mi Estado Diario
+            navigate_to_estado_diario(driver)
+            
         else:
             print("No se pudo completar el proceso de login")
         
