@@ -67,7 +67,7 @@ def login_to_pjud(driver):
         
         # Verificar que el login fue exitoso esperando algún elemento de la página tras el login
         print("Verificando inicio de sesión...")
-        wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual") or contains(@class, "user-profile")]'), 30)
+        wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual")]'), 30)
         
         print("Inicio de sesión exitoso!")
         return True
@@ -138,40 +138,37 @@ def navigate_mis_causas_tabs(driver):
     """Navega por todas las pestañas en la sección Mis Causas"""
     print("\n--- Navegando por pestañas de Mis Causas ---")
     
+    # Llevar un registro de las pestañas ya visitadas
+    visited_tabs = set()
+    
     for tab_name in MIS_CAUSAS_TABS:
         try:
             print(f"  Navegando a pestaña '{tab_name}'...")
             
+            # Si ya visitamos esta pestaña, evitamos hacerlo de nuevo
+            if tab_name in visited_tabs:
+                print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
+                continue
+                
             # Intentar encontrar y hacer clic en la pestaña
-            tab_xpath = f"//a[contains(text(), '{tab_name}')]"
-            tab_element = None
+            tab_elements = driver.find_elements(By.XPATH, f"//a[contains(text(), '{tab_name}')]")
             
-            try:
-                tab_element = driver.find_element(By.XPATH, tab_xpath)
-            except:
+            if not tab_elements:
                 print(f"  No se encontró pestaña con ese nombre exacto. Intentando alternativas...")
+                # Buscar con una coincidencia más flexible
+                tab_elements = driver.find_elements(By.XPATH, f"//a[contains(., '{tab_name}')]")
             
-            # Si no se encuentra, intentar con una búsqueda más flexible
-            if not tab_element:
-                try:
-                    # Buscar por texto parcial
-                    tab_element = driver.find_element(By.XPATH, f"//a[contains(., '{tab_name}')]")
-                except:
-                    print(f"  No se pudo encontrar la pestaña '{tab_name}'")
-                    continue
-            
+            if not tab_elements:
+                print(f"  No se pudo encontrar la pestaña '{tab_name}'. Continuando...")
+                continue
+                
             # Hacer clic en la pestaña
+            tab_element = tab_elements[0]  # Tomar el primer elemento que coincida
             driver.execute_script("arguments[0].click();", tab_element)
             print(f"  Clic exitoso en pestaña '{tab_name}'")
             
-            # Ejecutar la función de búsqueda asociada a esta pestaña (si existe)
-            if tab_name in TAB_FUNCTIONS:
-                js_function = TAB_FUNCTIONS[tab_name]
-                try:
-                    driver.execute_script(f"buscar('{js_function}');")
-                    print(f"  Ejecutada función de búsqueda '{js_function}'")
-                except Exception as js_error:
-                    print(f"  Error al ejecutar función de búsqueda: {str(js_error)}")
+            # Registrar que hemos visitado esta pestaña
+            visited_tabs.add(tab_name)
             
             # Esperar un momento para que cargue la pestaña
             time.sleep(2)
@@ -185,48 +182,72 @@ def navigate_estado_diario_tabs(driver):
     """Navega por todas las pestañas en la sección Mi Estado Diario"""
     print("\n--- Navegando por pestañas de Mi Estado Diario ---")
     
+    # Llevar un registro de las pestañas ya visitadas
+    visited_tabs = set()
+    
+    # Variable para controlar si ya se ha manejado el error de DataTable en Civil
+    civil_error_handled = False
+    
     for tab_name in MI_ESTADO_DIARIO_TABS:
         try:
             print(f"  Navegando a pestaña '{tab_name}'...")
             
+            # Si ya visitamos esta pestaña, evitamos hacerlo de nuevo
+            if tab_name in visited_tabs:
+                print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
+                continue
+                
             # Intentar encontrar y hacer clic en la pestaña
-            tab_xpath = f"//a[contains(text(), '{tab_name}')]"
-            tab_element = None
+            tab_elements = driver.find_elements(By.XPATH, f"//a[contains(text(), '{tab_name}')]")
             
-            try:
-                tab_element = driver.find_element(By.XPATH, tab_xpath)
-            except:
+            if not tab_elements:
                 print(f"  No se encontró pestaña con ese nombre exacto. Intentando alternativas...")
+                # Buscar con una coincidencia más flexible
+                tab_elements = driver.find_elements(By.XPATH, f"//a[contains(., '{tab_name}')]")
             
-            # Si no se encuentra, intentar con una búsqueda más flexible
-            if not tab_element:
-                try:
-                    # Buscar por texto parcial
-                    tab_element = driver.find_element(By.XPATH, f"//a[contains(., '{tab_name}')]")
-                except:
-                    print(f"  No se pudo encontrar la pestaña '{tab_name}'")
-                    continue
-            
+            if not tab_elements:
+                print(f"  No se pudo encontrar la pestaña '{tab_name}'. Continuando...")
+                continue
+                
             # Hacer clic en la pestaña
+            tab_element = tab_elements[0]  # Tomar el primer elemento que coincida
             driver.execute_script("arguments[0].click();", tab_element)
             print(f"  Clic exitoso en pestaña '{tab_name}'")
             
-            # Ejecutar la función de búsqueda asociada a esta pestaña (si existe)
+            # Registrar que hemos visitado esta pestaña
+            visited_tabs.add(tab_name)
+            
+            # Manejo especial para Civil por error de DataTable
+            if tab_name == "Civil" and not civil_error_handled:
+                time.sleep(3)
+                civil_error_handled = True
+                continue
+            
+            # Para otras pestañas, ejecutar la función de búsqueda si está definida
             if tab_name in TAB_FUNCTIONS:
                 js_function = TAB_FUNCTIONS[tab_name]
                 try:
+                    # Usar la función buscar directamente como se muestra en el HTML de la pagina
                     driver.execute_script(f"buscar('{js_function}');")
                     print(f"  Ejecutada función de búsqueda '{js_function}'")
                 except Exception as js_error:
                     print(f"  Error al ejecutar función de búsqueda: {str(js_error)}")
+                    # Intento alternativo: buscar el botón específico y hacer clic
+                    try:
+                        buscar_btn = driver.find_element(By.XPATH, f"//button[contains(@onclick, '{js_function}') or contains(@id, 'buscar')]")
+                        driver.execute_script("arguments[0].click();", buscar_btn)
+                        print(f"  Clic exitoso en botón de búsqueda alternativo")
+                    except:
+                        print(f"  No se pudo encontrar botón de búsqueda alternativo")
             
             # Esperar un momento para que cargue la pestaña
-            time.sleep(2)
+            time.sleep(3)
             
         except Exception as e:
             print(f"  Error navegando a pestaña '{tab_name}': {str(e)}")
     
     print("--- Finalizada navegación por pestañas de Mi Estado Diario ---\n")
+
 
 def main():
     driver = None
@@ -248,8 +269,9 @@ def main():
         clave_unica_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(text(), 'Clave Única')]"))
         clave_unica_btn.click()
         
-        # Llamar a la función de login cuando ya estamos en la página de Clave Única
+        # Llama a la función de login
         login_success = login_to_pjud(driver)
+    
         
         if login_success:
             print("Login completado con éxito")
@@ -262,18 +284,7 @@ def main():
             
             if mis_causas_success:
                 # Navegar por las pestañas de Mis Causas
-                navigate_mis_causas_tabs(driver)
-            
-            # Regresar al menú principal antes de navegar a Mi Estado Diario
-            # Esto dependerá de cómo esté estructurada la página
-            # Puedes necesitar hacer clic en un botón de "Volver" o similar
-            try:
-                # Intento volver al menú principal (esto puede necesitar ajustes)
-                print("Intentando volver al menú principal...")
-                driver.find_element(By.XPATH, "//a[contains(text(), 'Volver') or contains(@class, 'home')]").click()
-                time.sleep(2)
-            except:
-                print("No se pudo encontrar botón para volver. Intentando navegar directamente...")
+                navigate_mis_causas_tabs(driver)        
             
             # 2. Navegar a Mi Estado Diario
             estado_diario_success = navigate_to_estado_diario(driver)
