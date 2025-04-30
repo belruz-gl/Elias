@@ -1,0 +1,2 @@
+# Ignorar el archivo .env que contiene las claves
+.env

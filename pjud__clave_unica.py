@@ -1,16 +1,26 @@
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
-import time
-import random
 import undetected_chromedriver as uc
+from dotenv import load_dotenv
+import time, random, os
 
 # Variables globales
 BASE_URL = "https://oficinajudicialvirtual.pjud.cl/home/"
-USERNAME = REMOVED
-PASSWORD = REMOVED
+
+# Carga el archivo .env
+load_dotenv()
+
+# Obtén las variables de entorno
+USERNAME = os.getenv("PJUD_RUT")
+PASSWORD = os.getenv("PJUD_CLAVE")
+
+# Asegúrate de que las claves se cargan correctamente
+if USERNAME and PASSWORD:
+    print("Las claves se han cargado correctamente.")
+else:
+    print("Faltan claves en el archivo .env.")
 
 # Lista de pestañas para "Mis Causas" y "Mi Estado Diario"
 MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia", "Disciplinario"]
@@ -30,7 +40,7 @@ TAB_FUNCTIONS = {
 def setup_driver():
     options = uc.ChromeOptions()
 
-    # Lista de user agents comunes y variados
+    # Lista de user agents
     user_agents = [
         # Navegadores de escritorio
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Safari/537.36",
@@ -41,7 +51,7 @@ def setup_driver():
         "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Mobile Safari/537.36"
     ]
 
-    # Elegir uno al azar
+    # se elige uno al azar
     selected_user_agent = random.choice(user_agents)
     options.add_argument(f'user-agent={selected_user_agent}')
     print(f"User-Agent seleccionado: {selected_user_agent}")
@@ -68,7 +78,7 @@ def setup_driver():
     options.add_argument('--disable-notifications')
     options.add_argument('--disable-popup-blocking')
     
-    # Crear el driver con undetected-chromedriver
+    # Crear el driver 
     driver = uc.Chrome(options=options)
     
     # Modificar las propiedades del navegador para evitar la detección
@@ -163,7 +173,7 @@ def navigate_to_mis_causas(driver):
                 return False
         
         # Dar tiempo para que cargue la página
-        time.sleep(3)
+        random_sleep(1, 4)
         
         return True
         
@@ -175,7 +185,7 @@ def navigate_to_estado_diario(driver):
     try:
         print("Navegando a 'Mi Estado Diario'...")
         
-        # Intentar hacer clic en el elemento mediante JavaScript
+        # Intentar hacer clic en el elemento mediante JS
         try:
             driver.execute_script("miEstadoDiario();")
             print("Navegación a 'Mi Estado Diario' mediante JS exitosa!")
@@ -192,7 +202,7 @@ def navigate_to_estado_diario(driver):
                 return False
         
         # Dar tiempo para que cargue la página
-        time.sleep(3)
+        random_sleep(2, 4)
         
         return True
         
@@ -211,7 +221,7 @@ def navigate_mis_causas_tabs(driver):
         try:
             print(f"  Navegando a pestaña '{tab_name}'...")
             
-            # Si ya visitamos esta pestaña, evitamos hacerlo de nuevo
+            # si ya se visitó la pagina se evita hacerlo de nuevo
             if tab_name in visited_tabs:
                 print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
                 continue
@@ -258,7 +268,7 @@ def navigate_estado_diario_tabs(driver):
         try:
             print(f"  Navegando a pestaña '{tab_name}'...")
             
-            # Si ya visitamos esta pestaña, evitamos hacerlo de nuevo
+            # si ya se visitó la pagina se evita hacerlo de nuevo
             if tab_name in visited_tabs:
                 print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
                 continue
@@ -379,7 +389,7 @@ def main():
             print("Login completado con éxito")
             
             # Dar un tiempo para que la página principal se cargue completamente
-            time.sleep(3)
+            random_sleep(2, 4)
             
             # 1. Navegar a Mis Causas
             mis_causas_success = navigate_to_mis_causas(driver)
