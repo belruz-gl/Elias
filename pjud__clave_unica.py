@@ -29,6 +29,22 @@ TAB_FUNCTIONS = {
 
 def setup_driver():
     options = uc.ChromeOptions()
+
+    # Lista de user agents comunes y variados
+    user_agents = [
+        # Navegadores de escritorio
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Safari/537.36",
+        # Navegadores móviles
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Mobile Safari/537.36"
+    ]
+
+    # Elegir uno al azar
+    selected_user_agent = random.choice(user_agents)
+    options.add_argument(f'user-agent={selected_user_agent}')
+    print(f"User-Agent seleccionado: {selected_user_agent}")
     
     # Configuración básica para entorno sin interfaz gráfica
     #options.add_argument('--headless=new')
