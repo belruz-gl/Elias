@@ -2,7 +2,10 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 import time
+import random
+import undetected_chromedriver as uc
 
 # Variables globales
 BASE_URL = "https://oficinajudicialvirtual.pjud.cl/home/"
@@ -25,21 +28,53 @@ TAB_FUNCTIONS = {
 }
 
 def setup_driver():
-    options = webdriver.ChromeOptions()
+    options = uc.ChromeOptions()
     
-    # Configuración
-    #options.add_argument('--headless=chrome')
+    # Configuración básica para entorno sin interfaz gráfica
+    #options.add_argument('--headless=new')
     options.add_argument('--window-size=1920,1080')
-    options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
-    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--disable-dev-shm-usage')
     
-    # Para evitar detección de automatización
+    # Configuraciones para evitar la detección
     options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     
-    return webdriver.Chrome(options=options)
+    # Configuraciones de idioma y zona horaria
+    options.add_argument('--lang=es-ES')
+    options.add_argument('--timezone=America/Santiago')
+    
+    # Configuraciones de red y rendimiento
+    options.add_argument('--disable-web-security')
+    options.add_argument('--allow-running-insecure-content')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--disable-infobars')
+    options.add_argument('--disable-notifications')
+    options.add_argument('--disable-popup-blocking')
+    
+    # Crear el driver con undetected-chromedriver
+    driver = uc.Chrome(options=options)
+    
+    # Modificar las propiedades del navegador para evitar la detección
+    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+        'source': '''
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5]
+            });
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['es-ES', 'es']
+            });
+        '''
+    })
+    
+    # Configurar timeouts
+    driver.set_page_load_timeout(30)
+    driver.set_script_timeout(30)
+    
+    return driver
 
 def wait_for_element(driver, locator, timeout=30):
     return WebDriverWait(driver, timeout).until(
@@ -53,22 +88,34 @@ def wait_for_clickable(driver, locator, timeout=30):
 
 def login_to_pjud(driver):
     try:
-        # Esperar a que cargue la página de Clave Única
         print("Esperando página de Clave Única...")
-        username_field = wait_for_element(driver, (By.ID, 'uname'))
+        random_sleep(2, 4)
         
-        # Ingresar credenciales
-        print("Ingresando credenciales...")
-        username_field.send_keys(USERNAME)
+        # Simular comportamiento humano antes de interactuar
+        simulate_human_behavior(driver)
+        
+        username_field = wait_for_element(driver, (By.ID, 'uname'))
+        human_like_mouse_movement(driver, username_field)
+        human_like_typing(username_field, USERNAME)
+        
+        random_sleep(1, 2)
         
         password_field = wait_for_element(driver, (By.ID, 'pword'))
-        password_field.send_keys(PASSWORD)
+        human_like_mouse_movement(driver, password_field)
+        human_like_typing(password_field, PASSWORD)
+        
+        random_sleep(1, 2)
         
         # Hacer clic en el botón de ingreso
         login_button = wait_for_element(driver, (By.XPATH, '//button[contains(text(), "INGRESA")]'))
+        human_like_mouse_movement(driver, login_button)
         driver.execute_script("arguments[0].click();", login_button)
         
-        # Verificar que el login fue exitoso esperando algún elemento de la página tras el login
+        # Simular comportamiento humano después del login
+        random_sleep(2, 4)
+        simulate_human_behavior(driver)
+        
+        # Verificar que el login fue exitoso
         print("Verificando inicio de sesión...")
         wait_for_element(driver, (By.XPATH, '//*[contains(text(), "Oficina Judicial Virtual")]'), 30)
         
@@ -83,7 +130,7 @@ def navigate_to_mis_causas(driver):
     try:
         print("Navegando a 'Mis Causas'...")
         
-        # Intentar hacer clic en el elemento mediante JavaScript
+        # Intentar hacer clic en el elemento mediante JS
         try:
             driver.execute_script("misCausas();")
             print("Navegación a 'Mis Causas' mediante JS exitosa!")
@@ -251,6 +298,42 @@ def navigate_estado_diario_tabs(driver):
     
     print("--- Finalizada navegación por pestañas de Mi Estado Diario ---\n")
 
+def random_sleep(min_seconds=1, max_seconds=3):
+    """Espera un tiempo aleatorio entre min_seconds y max_seconds"""
+    time.sleep(random.uniform(min_seconds, max_seconds))
+
+def human_like_typing(element, text):
+    """Simula la escritura humana con tiempos aleatorios entre caracteres"""
+    for char in text:
+        element.send_keys(char)
+        time.sleep(random.uniform(0.1, 0.3))
+
+def human_like_mouse_movement(driver, element):
+    """Simula el movimiento del mouse de forma más natural usando ActionChains"""
+    action = ActionChains(driver)
+    action.move_to_element(element)
+    action.perform()
+    random_sleep(0.5, 1.5)
+
+def random_scroll(driver):
+    """Realiza un scroll aleatorio en la página"""
+    scroll_amount = random.randint(100, 500)
+    driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
+    random_sleep(0.5, 1.5)
+
+def simulate_human_behavior(driver):
+    """Simula varios comportamientos humanos aleatorios"""
+    # Scroll aleatorio
+    if random.random() < 0.3:  # 30% de probabilidad
+        random_scroll(driver)
+    
+    # Movimiento del mouse aleatorio usando ActionChains
+    if random.random() < 0.2:  # 20% de probabilidad
+        # Mover a una posición aleatoria en la página
+        x = random.randint(100, 800)
+        y = random.randint(100, 600)
+        driver.execute_script(f"window.scrollTo({x}, {y});")
+        random_sleep(0.5, 1.5)
 
 def main():
     driver = None
