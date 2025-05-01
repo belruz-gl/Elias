@@ -12,11 +12,11 @@ BASE_URL = "https://oficinajudicialvirtual.pjud.cl/home/"
 # Carga el archivo .env
 load_dotenv()
 
-# Obtén las variables de entorno
+# Obtiene las variables de entorno
 USERNAME = os.getenv("PJUD_RUT")
 PASSWORD = os.getenv("PJUD_CLAVE")
 
-# Asegúrate de que las claves se cargan correctamente
+# revisa si se cargaron las variables de entorno
 if USERNAME and PASSWORD:
     print("Las claves se han cargado correctamente.")
 else:
@@ -407,18 +407,14 @@ def main():
             
         else:
             print("No se pudo completar el proceso de login")
-        
-        # Esperar a que el usuario presione Enter para cerrar el navegador
-        input("\nPresione Enter para cerrar el navegador...")
             
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
-        # Aún con error, esperamos a que el usuario decida cerrar
-        input("\nPresione Enter para cerrar el navegador...")
+
     finally:
         if driver:
-            print("Cerrando el navegador...")
+            print("Cerrando el navegador automáticamente...")
             driver.quit()
-            
+ 
 if __name__ == "__main__":
     main()
