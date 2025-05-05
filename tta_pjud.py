@@ -8,7 +8,7 @@ import time, random, os
 
 # Variables globales
 BASE_URL_PJUD = "https://oficinajudicialvirtual.pjud.cl/home/"
-BASE_URL_TTA = "https://accounts.claveunica.gob.cl/accounts/login/?next=/openid/authorize%3Fresponse_type%3Dcode%26client_id%3Dfba5ab8c38d3426492c31c99ad569bdb%26redirect_uri%3Dhttps%253A%252F%252Fojv.tta.cl%252FAccesoClaveUnica%252FservletRespuesta%26scope%3Dopenid%2Brun%2Bname%26state%3D1AT9I_q9Sk4qjKghXLhka_fZWF_TTlSPVkDJGF8o58s%26nonce%3DeMbrBlUgyaeaqw073goRPX8K1hTF24HBAaOMh01C2ow"
+BASE_URL_TTA = "https://www.tta.cl/"
 
 # Listas y diccionarios para la navegación en PJUD
 MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia", "Disciplinario"]
@@ -139,7 +139,7 @@ def simulate_human_behavior(driver):
         random_sleep(0.5, 1.5)
 
 # Funciones específicas para PJUD
-def login_to_pjud(driver, username, password):
+def login(driver, username, password):
     try:
         print("Esperando página de Clave Única...")
         random_sleep(2, 4)
@@ -372,7 +372,7 @@ def automatizar_poder_judicial(driver, username, password):
         clave_unica_btn.click()
         
         # Llama a la función de login
-        login_success = login_to_pjud(driver, username, password)
+        login_success = login(driver, username, password)
     
         if login_success:
             print("Login completado con éxito")
@@ -405,11 +405,7 @@ def automatizar_poder_judicial(driver, username, password):
         return False
 
 # Función para automatizar TTA
-"""
 def automatizar_tta(driver, username, password):
-   
-    Función que contiene toda la lógica para automatizar la navegación en TTA.
-    Puede ser llamada desde main() o desde cualquier otra función.
    
     try:
         print("\n=== INICIANDO AUTOMATIZACIÓN DE TTA ===\n")
@@ -417,23 +413,47 @@ def automatizar_tta(driver, username, password):
         # Abrir la página principal de TTA
         print("Accediendo a la página principal de TTA...")
         driver.get(BASE_URL_TTA)
+        random_sleep(3, 5)
         
-        # Aquí deberías implementar los pasos necesarios para navegar en la página TTA
-        # Ejemplo:
-        # 1. Login
-        # 2. Navegación por secciones
-        # 3. Extracción de datos
+        # Esperar y hacer clic en "oficina judicial virtual tta"
+        print("Buscando botón 'oficina judicial virtual tta'...")
+        ojv_tta_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(@href, 'ojv.tta.cl')]"))
+        ojv_tta_btn.click()
+
+        random_sleep(3, 5)
+
+        #falta buscar boton clave unica
+                
+
+
         
-        print("Implementación pendiente para TTA...")
-        
-        # Placeholder para futuras implementaciones
-        print("\n=== AUTOMATIZACIÓN DE TTA COMPLETADA ===\n")
-        return True
-        
+        #1. Login
+        login_success = login(driver, username, password)
+        if login_success:
+            print("Login completado con éxito")
+            
+            # Dar un tiempo para que la página principal se cargue completamente
+            random_sleep(2, 4)
+            
+            # 2. Navegación por secciones
+
+
+            # 3. Extracción de datos
+
+
+            
+            print("\n=== AUTOMATIZACIÓN DE TTA COMPLETADA ===\n")
+            return True 
+
+        else:
+            print("No se pudo completar el proceso de login")
+            return False  
+   
     except Exception as e:
         print(f"Error en la automatización de TTA: {str(e)}")
         return False
-"""
+
+
 def main():
     # Carga el archivo .env
     load_dotenv()
@@ -455,10 +475,10 @@ def main():
         driver = setup_driver()
         
         # Poder Judicial
-        automatizar_poder_judicial(driver, USERNAME, PASSWORD)
+        #automatizar_poder_judicial(driver, USERNAME, PASSWORD)
         
         # TTA
-        # automatizar_tta(driver, USERNAME, PASSWORD)
+        automatizar_tta(driver, USERNAME, PASSWORD)
         
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
