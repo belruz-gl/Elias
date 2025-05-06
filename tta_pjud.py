@@ -146,13 +146,15 @@ def login(driver, username, password):
         
         # Simular comportamiento humano antes de interactuar
         simulate_human_behavior(driver)
-        
+
+        print("Ingresando usuario...")
         username_field = wait_for_element(driver, (By.ID, 'uname'))
         human_like_mouse_movement(driver, username_field)
         human_like_typing(username_field, username)
         
         random_sleep(1, 2)
         
+        print("Ingresando contraseña...")
         password_field = wait_for_element(driver, (By.ID, 'pword'))
         human_like_mouse_movement(driver, password_field)
         human_like_typing(password_field, password)
@@ -418,29 +420,40 @@ def automatizar_tta(driver, username, password):
         # Esperar y hacer clic en "oficina judicial virtual tta"
         print("Buscando botón 'oficina judicial virtual tta'...")
         ojv_tta_btn = wait_for_clickable(driver, (By.XPATH, "//a[contains(@href, 'ojv.tta.cl')]"))
-        ojv_tta_btn.click()
+        ojv_tta_btn.click()                                            
 
         random_sleep(3, 5)
-
-        #falta buscar boton clave unica
-                
-
-
         
-        #1. Login
+        # Cambiar a la nueva pestaña abierta
+        all_handles = driver.window_handles
+        driver.switch_to.window(all_handles[-1])
+        print(f"Navegando en la nueva pestaña: {driver.current_url}")
+
+        # Clickear en opcion clave unica para iniciar sesion
+        print("Buscando y haciendo clic en 'Clave Única'...")
+        
+        clave_unica_btn = wait_for_clickable(
+            driver, 
+            (By.XPATH, "//a[contains(@href, 'AccesoClaveUnica')][.//span[contains(@class, 'icon-clave-unica')]]"),
+            timeout=8
+        )
+        clave_unica_btn.click()
+        print("Botón 'Clave Única' encontrado y clicado mediante XPath")
+            
+        random_sleep(2, 4)
+        
+        # 1. Login
         login_success = login(driver, username, password)
         if login_success:
             print("Login completado con éxito")
             
-            # Dar un tiempo para que la página principal se cargue completamente
+            # Dar un tiempo para que la página principal se cargue 
             random_sleep(2, 4)
             
             # 2. Navegación por secciones
-
-
+            
             # 3. Extracción de datos
-
-
+            
             
             print("\n=== AUTOMATIZACIÓN DE TTA COMPLETADA ===\n")
             return True 
@@ -451,8 +464,9 @@ def automatizar_tta(driver, username, password):
    
     except Exception as e:
         print(f"Error en la automatización de TTA: {str(e)}")
+        driver.save_screenshot("error_automatizacion.png")
+        print("Se guardó captura de pantalla del error")
         return False
-
 
 def main():
     # Carga el archivo .env
@@ -475,10 +489,10 @@ def main():
         driver = setup_driver()
         
         # Poder Judicial
-        #automatizar_poder_judicial(driver, USERNAME, PASSWORD)
+        automatizar_poder_judicial(driver, USERNAME, PASSWORD)
         
         # TTA
-        automatizar_tta(driver, USERNAME, PASSWORD)
+        #automatizar_tta(driver, USERNAME, PASSWORD)
         
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
