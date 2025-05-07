@@ -179,6 +179,11 @@ def login(driver, username, password):
         
     except Exception as e:
         print(f"Error durante el proceso de login: {str(e)}")
+        try:
+            driver.save_screenshot("error_login.png")
+            print("Captura de pantalla guardada: error_login.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
         return False
 
 def navigate_to_mis_causas(driver):
@@ -208,6 +213,11 @@ def navigate_to_mis_causas(driver):
         
     except Exception as e:
         print(f"Error al navegar a 'Mis Causas': {str(e)}")
+        try:
+            driver.save_screenshot("error_mis_causas.png")
+            print("Captura de pantalla guardada: error_mis_causas.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
         return False
 
 def navigate_to_estado_diario(driver):
@@ -237,6 +247,11 @@ def navigate_to_estado_diario(driver):
         
     except Exception as e:
         print(f"Error al navegar a 'Mi Estado Diario': {str(e)}")
+        try:
+            driver.save_screenshot("error_estado_diario.png")
+            print("Captura de pantalla guardada: error_estado_diario.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
         return False
 
 def navigate_mis_causas_tabs(driver):
@@ -280,6 +295,11 @@ def navigate_mis_causas_tabs(driver):
             
         except Exception as e:
             print(f"  Error navegando a pestaña '{tab_name}': {str(e)}")
+            try:
+                driver.save_screenshot(f"error_mis_causas_tab_{tab_name}.png")
+                print(f"Captura de pantalla guardada: error_mis_causas_tab_{tab_name}.png")
+            except Exception as ss_e:
+                print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
     
     print("--- Finalizada navegación por pestañas de Mis Causas ---\n")
 
@@ -350,6 +370,11 @@ def navigate_estado_diario_tabs(driver):
             
         except Exception as e:
             print(f"  Error navegando a pestaña '{tab_name}': {str(e)}")
+            try:
+                driver.save_screenshot(f"error_estado_diario_tab_{tab_name}.png")
+                print(f"Captura de pantalla guardada: error_estado_diario_tab_{tab_name}.png")
+            except Exception as ss_e:
+                print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
     
     print("--- Finalizada navegación por pestañas de Mi Estado Diario ---\n")
 
@@ -404,6 +429,11 @@ def automatizar_poder_judicial(driver, username, password):
             
     except Exception as e:
         print(f"Error en la automatización del Poder Judicial: {str(e)}")
+        try:
+            driver.save_screenshot("error_automatizacion_pjud.png")
+            print("Captura de pantalla guardada: error_automatizacion_pjud.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
         return False
 
 # Función para automatizar TTA
@@ -464,8 +494,11 @@ def automatizar_tta(driver, username, password):
    
     except Exception as e:
         print(f"Error en la automatización de TTA: {str(e)}")
-        driver.save_screenshot("error_automatizacion.png")
-        print("Se guardó captura de pantalla del error")
+        try:
+            driver.save_screenshot("error_automatizacion_tta.png")
+            print("Captura de pantalla guardada: error_automatizacion_tta.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
         return False
 
 def main():
@@ -496,6 +529,11 @@ def main():
         
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
+        try:
+            driver.save_screenshot("error_main.png")
+            print("Captura de pantalla guardada: error_main.png")
+        except Exception as ss_e:
+            print(f"No se pudo guardar la captura de pantalla: {str(ss_e)}")
 
     finally:
         if driver:
