@@ -1,2 +1,5 @@
 # Ignorar el archivo .env que contiene las claves
 .env
+
+#Carpetas con pdfs
+Corte_Suprema/
