@@ -323,52 +323,68 @@ class ControladorLupa:
         self.config = self.obtener_config()
     
     def obtener_config(self):
-        # Cada clase hija implementa su propia configuración
         raise NotImplementedError
-    
+
+    def _obtener_lupas(self):
+        print("  Buscando todas las lupas en la tabla...")
+        lupas = self.page.query_selector_all(self.config['lupa_selector'])
+        print(f"  Se encontraron {len(lupas)} lupas.")
+        return lupas
+
     def manejar(self, tab_name):
         try:
             print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
-            self._hacer_clic_lupa()
-            self._verificar_modal()
-            self._verificar_tabla()
-            self._procesar_contenido(tab_name)
-            self._cambiar_pestana_modal()
-            self._cerrar_modal()
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            for idx, lupa_link in enumerate(lupas):
+                try:
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 3:
+                        continue
+                    caratulado = tds[2].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    lupa_link.click()
+                    random_sleep(1, 2)
+                    self._verificar_modal()
+                    self._verificar_tabla()
+                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                    self._cambiar_pestana_modal(caratulado, tab_name)
+                    self._cerrar_modal()
+                    
+                    # Solo procesar la primera lupa por ahora para evitar problemas
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    self._cerrar_modal()
+                    continue
             return True
         except Exception as e:
             self._manejar_error(e)
             return False
-
     
-    def _hacer_clic_lupa(self):
-        print("  Buscando enlace de lupa...")
-        lupa_link = self.page.query_selector(self.config['lupa_selector'])
-        
-        if lupa_link:
-            print("  Enlace de lupa encontrado")
-            random_sleep(1, 2)
-            try:
-                print("  Intentando clic mediante JavaScript...")
-                self.page.evaluate(f"""
-                    (function() {{
-                        const link = document.querySelector('{self.config['lupa_selector']}');
-                        if (link) {{
-                            link.click();
-                            return true;
-                        }}
-                        return false;
-                    }})();
-                """)
-                print("  Clic mediante JavaScript exitoso")
-            except Exception as js_error:
-                print(f"  Error al hacer clic con JavaScript: {str(js_error)}")
-                print("  Intentando clic directo...")
-                lupa_link.click()
-                print("  Clic directo exitoso")
-        else:
-            print("  No se encontró el enlace de lupa")
-            raise Exception("No se encontró el enlace de lupa")
+    def _manejar_error(self, e):
+        """Maneja errores durante el procesamiento"""
+        print(f"  Error: {str(e)}")
+        # Asegurarse de cerrar los modales si hay un error
+        try:
+            self._cerrar_ambos_modales()
+        except Exception as close_error:
+            print(f"  Error adicional al intentar cerrar modales: {str(close_error)}")
+    
+    def _cerrar_modal(self):
+        """Cierra el modal principal"""
+        try:
+            print("  Cerrando modal principal...")
+            self._cerrar_ambos_modales()
+        except Exception as e:
+            print(f"  Error al cerrar modal: {str(e)}")
     
     def _verificar_modal(self):
         print(f"  Esperando que el modal esté visible...")
@@ -426,96 +442,108 @@ class ControladorLupa:
             print(f"  Error esperando la tabla: {str(table_error)}")
             return False
     
-    def _procesar_contenido(self, tab_name):
-        if not self.config.get('process_content'):
-            return True
-        
-        # Pasar directamente el nombre de la pestaña como parámetro
-        return verificar_movimientos_nuevos(self.page, tab_name)
-    
-    def _cerrar_modal(self):
+    def _procesar_contenido(self, tab_name, caratulado):
         try:
-            self.page.evaluate(f"""
-                () => {{
-                    const closeBtn = document.querySelector('{self.config['modal_selector']} .modal-header button.close');
-                    if (closeBtn) {{
-                        closeBtn.click();
-                        return true;
-                    }}
-                    return false;
-                }}
-            """)
-            random_sleep(1, 2)
-            return True
+            print(f"[INFO] Verificando movimientos nuevos en pestaña '{tab_name}'...")
+            self.page.wait_for_selector("table.table-titulos", timeout=10000)
+            panel = self.page.query_selector("table.table-titulos")
+            numero_causa = None
+            if panel:
+                panel.scroll_into_view_if_needed()
+                random_sleep(1, 2)
+                try:
+                    libro_td = panel.query_selector("td:has-text('Libro')")
+                    if libro_td:
+                        libro_text = libro_td.inner_text()
+                        match = re.search(r"/\s*(\d+)", libro_text)
+                        if match:
+                            numero_causa = match.group(1)
+                            print(f"[INFO] Número de causa extraído: {numero_causa}")
+                except Exception as e:
+                    print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
+            else:
+                print("[WARN] No se encontró el panel de información")
+            self.page.wait_for_selector("table.table-bordered", timeout=10000)
+            movimientos = self.page.query_selector_all("table.table-bordered tbody tr")
+            print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
+            movimientos_nuevos = False
+            for movimiento in movimientos:
+                try:
+                    folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
+                    fecha_tramite_str = movimiento.query_selector("td:nth-child(5)").inner_text().strip()
+                    if fecha_tramite_str == "01/12/2022":
+                        movimientos_nuevos = True
+                        carpeta_general = tab_name.replace(' ', '_')
+                        carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                        if not os.path.exists(carpeta_caratulado):
+                            os.makedirs(carpeta_caratulado)
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        if panel:
+                            panel.screenshot(path=detalle_panel_path)
+                            print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                        pdf_form = movimiento.query_selector("form[name='frmPdf']")
+                        if pdf_form:
+                            token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
+                            causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
+                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            if token:
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
+                                original_url = base_url + token
+                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                if pdf_descargado:
+                                    try:
+                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                        if images and len(images) > 0:
+                                            images[0].save(preview_path, 'PNG')
+                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        else:
+                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                    except Exception as prev_error:
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                        else:
+                            print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                except Exception as e:
+                    print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                    continue
+            return movimientos_nuevos
         except Exception as e:
-            print(f"  Error al cerrar el modal: {str(e)}")
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
-    
-    def _manejar_error(self, error):
-        print(f"  Error al manejar lupa: {str(error)}")
 
-
-    def _cambiar_pestana_modal(self):
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
         try:
             print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
             self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
-            
-             
-            # Realizar el cambio usando JavaScript
-            self.page.evaluate("""
-                document.querySelector('.nav-tabs li a[href="#corteApelaciones"]').click();
-            """)
-            
-            # Esperar a que la pestaña sea visible
+            self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
             self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
             random_sleep(1, 2)
-            
-                
             print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
-            
-            # Buscar y hacer clic en la lupa de Expediente Corte Apelaciones
             try:
                 print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
-                # Esperar a que el elemento de la lupa esté visible
                 self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
-                
-                # Hacer clic en la lupa usando JavaScript con el onclick
-                self.page.evaluate("""
-                    document.querySelector('a[href="#modalDetalleApelaciones"]').click();
-                """)
-                
+                self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
                 print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
-                
-                # Esperar a que se abra el nuevo modal verificando el título
-                print("  Esperando que aparezca el modal con título 'Detalle Causa Apelaciones'...")
                 self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
                 random_sleep(1, 2)
-                
                 print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
                 
-                # Crear la subcarpeta para guardar las capturas y PDFs
-                pestaña_principal = "Corte_Suprema"  # Carpeta principal
-                subcarpeta = f"{pestaña_principal}/Detalle_Causa_Apelaciones"
+                # Crear la subcarpeta si no existe
                 if not os.path.exists(subcarpeta):
                     os.makedirs(subcarpeta)
-                
-                # Verificar movimientos en el nuevo modal
-                self._verificar_movimientos_apelaciones(subcarpeta)
-                
-                # Cerrar AMBOS modales correctamente
+                    
+                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
                 self._cerrar_ambos_modales()
-                
             except Exception as e:
                 print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
-                # Intentar cerrar los modales incluso si hay error
                 self._cerrar_ambos_modales()
-
-                
         except Exception as e:
             print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
-            # Intentar cerrar los modales incluso si hay error
             self._cerrar_ambos_modales()
-    
+
     def _cerrar_ambos_modales(self):
         """Cierra correctamente ambos modales: Detalle Causa Apelaciones y Detalle Causa Suprema"""
         try:
@@ -557,6 +585,9 @@ class ControladorLupa:
                 print("  Todos los modales cerrados correctamente")
             else:
                 print("  ALERTA: Puede que algunos modales sigan abiertos")
+                
+            # Esperar un momento para asegurar que la UI se estabilice
+            random_sleep(1, 2)
                 
         except Exception as e:
             print(f"  Error al cerrar los modales: {str(e)}")
@@ -647,7 +678,7 @@ class ControladorLupa:
             print("  Esperando por la tabla de movimientos en el tab activo...")
             self.page.wait_for_selector("#movimientosApe table.table-bordered", timeout=10000)
             
-            # Fecha específica para la verificación de movimientos de apelaciones: 20/01/2023
+            # Fecha específica para la verificación de movimientos de apelaciones
             fecha_actual_str = "20/01/2023"
             
             print(f"  Verificando movimientos del día: {fecha_actual_str}")
@@ -721,172 +752,919 @@ class ControladorLupaSuprema(ControladorLupa):
             'expected_headers': ['Folio', 'Tipo', 'Descripción', 'Fecha', 'Documento'],
             'process_content': True
         }
-        
-    def _verificar_movimientos_apelaciones(self, subcarpeta):
-        """Verifica los movimientos en el modal de Apelaciones y guarda los resultados"""
+
+    def _procesar_contenido(self, tab_name, caratulado):
         try:
-            print(f"  Verificando movimientos en modal de Apelaciones...")
-            
-            # Obtener el número de causa
+            print(f"[INFO] Verificando movimientos nuevos en pestaña '{tab_name}'...")
+            self.page.wait_for_selector("table.table-titulos", timeout=10000)
+            panel = self.page.query_selector("table.table-titulos")
             numero_causa = None
-            try:
-                panel_titulos = self.page.query_selector("#modalDetalleApelaciones table.table-titulos")
-                if panel_titulos:
-                    libro_td = panel_titulos.query_selector("td:has-text('Libro')")
+            if panel:
+                panel.scroll_into_view_if_needed()
+                random_sleep(1, 2)
+                try:
+                    libro_td = panel.query_selector("td:has-text('Libro')")
                     if libro_td:
                         libro_text = libro_td.inner_text()
                         match = re.search(r"/\s*(\d+)", libro_text)
                         if match:
                             numero_causa = match.group(1)
-                            print(f"  Número de causa extraído: {numero_causa}")
-            except Exception as e:
-                print(f"  No se pudo extraer el número de causa: {str(e)}")
-            
-            # Tomar captura de la sección de información de la causa
-            try:
-                # Identificar la sección superior del modal con la información general de la causa
-                info_panel = self.page.query_selector("#modalDetalleApelaciones .modal-body > div:first-child")
-                
-                # Si no se encuentra con ese selector, intentar con otro selector más específico
-                if not info_panel:
-                    info_panel = self.page.query_selector("#modalDetalleApelaciones table.table-titulos")
-                
-                if info_panel:
-                    # Asegurar que exista la carpeta
-                    if not os.path.exists(subcarpeta):
-                        os.makedirs(subcarpeta)
-                    
-                    # Hacer scroll para asegurar que el elemento es visible
-                    info_panel.scroll_into_view_if_needed()
-                    random_sleep(0.5, 1)
-                    
-                    # Guardar la captura de la sección de información
-                    panel_screenshot_path = f"{subcarpeta}/Info_Causa_{numero_causa if numero_causa else 'sin_numero'}.png"
-                    info_panel.screenshot(path=panel_screenshot_path)
-                    print(f"  Captura de la información de la causa guardada en: {panel_screenshot_path}")
-                else:
-                    print("  No se pudo encontrar la sección de información para capturar")
-            except Exception as capture_error:
-                print(f"  Error al capturar la sección de información: {str(capture_error)}")
-
-            # Asegurarse de que el tab "movimientosApe" esté activo
-            print("  Activando la pestaña de movimientos...")
-            try:
-                # Verificar si ya hay alguna pestaña activa
-                active_tab = self.page.query_selector("#modalDetalleApelaciones .tab-pane.active")
-                if active_tab:
-                    active_id = self.page.evaluate("el => el.id", active_tab)
-                    print(f"  Pestaña activa actualmente: {active_id}")
-                
-                # Hacer clic en la pestaña de movimientos para activarla
-                self.page.evaluate("""
-                    () => {
-                        // Buscar el enlace que apunta al tab movimientosApe
-                        const tabLink = document.querySelector('#modalDetalleApelaciones .nav-tabs a[href="#movimientosApe"]');
-                        if (tabLink) {
-                            console.log('Enlace a pestaña encontrado, haciendo clic...');
-                            tabLink.click();
-                            return true;
-                        } else {
-                            console.log('No se encontró el enlace a la pestaña');
-                            return false;
-                        }
-                    }
-                """)
-                
-                # Esperar a que la pestaña esté activa
-                self.page.wait_for_selector("#modalDetalleApelaciones #movimientosApe.active", timeout=5000)
-                print("  Pestaña de movimientos activada correctamente")
-                
-                #  pausa para asegurar que todo cargue correctamente
-                random_sleep(1, 2)
-            except Exception as tab_error:
-                print(f"  Error al activar la pestaña de movimientos: {str(tab_error)}")
-                # Si hay un error, intentamos continuar de todos modos
-            
-            # Esperar a que la tabla de movimientos esté visible usando el nuevo selector
-            print("  Esperando por la tabla de movimientos en el tab activo...")
-            self.page.wait_for_selector("#movimientosApe table.table-bordered", timeout=10000)
-            
-            # Fecha prueba específica para la verificación de movimientos de apelaciones: 20/01/2023
-            fecha_actual_str = "20/01/2023"
-            
-            print(f"  Verificando movimientos del día: {fecha_actual_str}")
-            
-            # Obtener todos los movimientos usando el selector correcto para la pestaña activa
-            movimientos = self.page.query_selector_all("#movimientosApe table.table-bordered tbody tr")
-            print(f"  Se encontraron {len(movimientos)} movimientos")
-            
-            # Revisar cada movimiento
+                            print(f"[INFO] Número de causa extraído: {numero_causa}")
+                except Exception as e:
+                    print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
+            else:
+                print("[WARN] No se encontró el panel de información")
+            self.page.wait_for_selector("table.table-bordered", timeout=10000)
+            movimientos = self.page.query_selector_all("table.table-bordered tbody tr")
+            print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
+            movimientos_nuevos = False
             for movimiento in movimientos:
                 try:
                     folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
-                    fecha_tramite_str = movimiento.query_selector("td:nth-child(6)").inner_text().strip()  # Cambiamos el índice de 5 a 6 según el HTML
-                    
-                    # Verificar si el movimiento es de la fecha especificada
-                    if fecha_tramite_str == fecha_actual_str:
-                        print(f"  Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
-                        
-                        # Verificar si hay PDF disponible
-                        pdf_form = movimiento.query_selector("form[name='frmDoc']")  # Cambiamos de frmPdf a frmDoc
+                    fecha_tramite_str = movimiento.query_selector("td:nth-child(5)").inner_text().strip()
+                    if fecha_tramite_str == "01/12/2022":
+                        movimientos_nuevos = True
+                        carpeta_general = tab_name.replace(' ', '_')
+                        carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                        if not os.path.exists(carpeta_caratulado):
+                            os.makedirs(carpeta_caratulado)
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        if panel:
+                            panel.screenshot(path=detalle_panel_path)
+                            print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                        pdf_form = movimiento.query_selector("form[name='frmPdf']")
                         if pdf_form:
-                            # Obtener el token para descargar el PDF (también se cambió valorFile por valorDoc)
-                            token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
+                            token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
                             causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
-                            pdf_filename = f"{subcarpeta}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
                             preview_path = pdf_filename.replace('.pdf', '_preview.png')
-                            
-                            # Construir la URL para descargar el PDF
                             if token:
-                                # URL para la descarga de PDF en Corte Apelaciones (modificada para usar valorDoc)
-                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/apelaciones/documentos/docCausaApelaciones.php?valorDoc="
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
                                 original_url = base_url + token
-                                
-                                # Descargar el PDF
-                                print(f"  Descargando PDF de Apelaciones...")
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
-                                
-                                # Generar una vista previa del PDF (primera página como imagen)
                                 if pdf_descargado:
                                     try:
-                                        print(f"  Generando vista previa del PDF para {pdf_filename}...")
-                                        # Convertir la primera página del PDF a imagen
                                         images = convert_from_path(pdf_filename, first_page=1, last_page=1)
                                         if images and len(images) > 0:
-                                            # Guardar solo la primera página como imagen
                                             images[0].save(preview_path, 'PNG')
-                                            print(f"  Vista previa guardada en: {preview_path}")
+                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
                                         else:
-                                            print(f"  No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
-                                        print(f"  Error al generar la vista previa del PDF: {str(prev_error)}")
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
-                            print(f"  No hay PDF disponible para el movimiento {folio}")
+                            print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                 except Exception as e:
-                    print(f"  Error procesando movimiento de Apelaciones: {str(e)}")
+                    print(f"[ERROR] Error procesando movimiento: {str(e)}")
                     continue
-            
-            return True
-            
+            return movimientos_nuevos
         except Exception as e:
-            print(f"  Error al verificar movimientos en modal de Apelaciones: {str(e)}")
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
 
-class ControladorLupaApelaciones(ControladorLupa):
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        try:
+            print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
+            self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
+            self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
+            self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
+            random_sleep(1, 2)
+            print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
+            try:
+                print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
+                self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
+                self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
+                print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
+                self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
+                random_sleep(1, 2)
+                print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
+                
+                # Crear la subcarpeta si no existe
+                if not os.path.exists(subcarpeta):
+                    os.makedirs(subcarpeta)
+                    
+                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                self._cerrar_ambos_modales()
+            except Exception as e:
+                print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
+                self._cerrar_ambos_modales()
+        except Exception as e:
+            print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
+            self._cerrar_ambos_modales()
+
+class ControladorLupaApelacionesPrincipal(ControladorLupa):
     def obtener_config(self):
         return {
-            'lupa_selector': "a[href='#modalDetalleApelaciones']",
-            'modal_selector': "#modalDetalleApelaciones",
+            'lupa_selector': "#dtaTableDetalleMisCauApe a[href*='modalDetalleMisCauApelaciones']",
+            'modal_selector': "#modalDetalleMisCauApelaciones",
             'modal_title': "Detalle Causa",
             'table_selector': ".modal-content table.table-bordered",
-            'expected_headers': ['Folio', 'Tipo', 'Descripción', 'Fecha', 'Documento'],
+            'expected_headers': ['Folio', 'Doc.', 'Anexo', 'Trámite', 'Descripción', 'Fecha', 'Sala', 'Estado', 'Georeferencia'],
             'process_content': True
         }
+
+    def manejar(self, tab_name):
+        try:
+            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            
+            # En Corte Apelaciones, usar un enfoque diferente para abrir el modal
+            for idx, lupa_link in enumerate(lupas):
+                try:
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 4:
+                        continue
+                    caratulado = tds[3].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    
+                    # Hacer scroll para asegurar que el elemento es visible
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(1, 2)
+                    
+                    # Extraer el token de la función JavaScript en el atributo onclick
+                    onclick_attr = lupa_link.get_attribute('onclick')
+                    if onclick_attr and "detalleMisCausaApelaciones" in onclick_attr:
+                        # Extraer el token entre comillas simples
+                        import re
+                        match = re.search(r"detalleMisCausaApelaciones\('([^']+)'\)", onclick_attr)
+                        if match:
+                            token = match.group(1)
+                            print(f"  Token extraído del onclick: {token[:20]}...")
+                            
+                            # Llamar directamente a la función JavaScript con el token
+                            try:
+                                print("  Llamando directamente a la función detalleMisCausaApelaciones...")
+                                self.page.evaluate(f"detalleMisCausaApelaciones('{token}')")
+                                random_sleep(2, 3)
+                            except Exception as js_error:
+                                print(f"  Error al llamar a detalleMisCausaApelaciones: {str(js_error)}")
+                    else:
+                        # Si no hay onclick o no contiene la función esperada, intentar con métodos anteriores
+                        print("  No se encontró la función detalleMisCausaApelaciones en onclick, probando métodos alternativos...")
+                        try:
+                            print("  Intentando hacer click directo en la lupa...")
+                            lupa_link.click()
+                            random_sleep(2, 3)
+                        except Exception as click_error:
+                            print(f"  Error en click directo: {str(click_error)}")
+                            
+                            # Si falla, intentamos con JavaScript
+                            try:
+                                print("  Intentando abrir modal usando JavaScript...")
+                                href = lupa_link.get_attribute('href')
+                                if href and 'modalDetalleMisCauApelaciones' in href:
+                                    modal_id = href.replace('#', '')
+                                    
+                                    # Probamos diferentes métodos para abrir el modal
+                                    self.page.evaluate(f"""
+                                        () => {{
+                                            try {{
+                                                // 1. Intentar con jQuery (método preferido)
+                                                if (typeof $ !== 'undefined') {{
+                                                    $('#{modal_id}').modal('show');
+                                                    return 1;
+                                                }}
+                                                
+                                                // 2. Intentar disparar un evento de clic en el elemento
+                                                const link = document.querySelector('a[href="#{modal_id}"]');
+                                                if (link) {{
+                                                    link.click();
+                                                    return 2;
+                                                }}
+                                                
+                                                // 3. Manipulación directa del DOM
+                                                const modal = document.querySelector('#{modal_id}');
+                                                if (modal) {{
+                                                    modal.style.display = 'block';
+                                                    modal.classList.add('in');
+                                                    document.body.classList.add('modal-open');
+                                                    
+                                                    // Crear backdrop si no existe
+                                                    if (!document.querySelector('.modal-backdrop')) {{
+                                                        const backdrop = document.createElement('div');
+                                                        backdrop.className = 'modal-backdrop in';
+                                                        document.body.appendChild(backdrop);
+                                                    }}
+                                                    
+                                                    return 3;
+                                                }}
+                                                
+                                                return 0;
+                                            }} catch (e) {{
+                                                console.error("Error al abrir modal:", e);
+                                                return -1;
+                                            }}
+                                        }}
+                                    """)
+                            except Exception as js_error:
+                                print(f"  Error en JavaScript: {str(js_error)}")
+                    
+                    # Verificar si el modal está visible
+                    try:
+                        modal_visible = self.page.evaluate(f"""
+                            () => {{
+                                const modal = document.querySelector('{self.config["modal_selector"]}');
+                                if (!modal) return false;
+                                
+                                const style = window.getComputedStyle(modal);
+                                return style.display === 'block' || style.display === 'flex';
+                            }}
+                        """)
+                        
+                        if modal_visible:
+                            print("  Modal abierto correctamente")
+                            # Ahora podemos procesar el contenido si el modal está visible
+                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                        else:
+                            print("  El modal no se pudo abrir. Intentando un último método...")
+                            
+                            # Último intento: Forzar la apertura del modal mediante manipulación directa del DOM
+                            try:
+                                print("  Intentando forzar apertura del modal mediante DOM...")
+                                self.page.evaluate(f"""
+                                    () => {{
+                                        try {{
+                                            // Seleccionar el modal
+                                            const modal = document.querySelector('{self.config["modal_selector"]}');
+                                            if (!modal) return false;
+                                            
+                                            // Forzar que sea visible
+                                            modal.style.display = 'block';
+                                            modal.classList.add('in');
+                                            document.body.classList.add('modal-open');
+                                            
+                                            // Crear backdrop si no existe
+                                            if (!document.querySelector('.modal-backdrop')) {{
+                                                const backdrop = document.createElement('div');
+                                                backdrop.className = 'modal-backdrop in';
+                                                document.body.appendChild(backdrop);
+                                            }}
+                                            
+                                            // Intentar activar eventos
+                                            modal.dispatchEvent(new Event('shown.bs.modal', {{ bubbles: true }}));
+                                            
+                                            return true;
+                                        }} catch (e) {{
+                                            console.error("Error al forzar apertura:", e);
+                                            return false;
+                                        }}
+                                    }}
+                                """)
+                                
+                                random_sleep(2, 3)
+                                
+                                # Verificar nuevamente si se abrió
+                                modal_visible = self.page.evaluate(f"""
+                                    () => {{
+                                        const modal = document.querySelector('{self.config["modal_selector"]}');
+                                        if (!modal) return false;
+                                        
+                                        const style = window.getComputedStyle(modal);
+                                        return style.display === 'block' || style.display === 'flex';
+                                    }}
+                                """)
+                                
+                                if modal_visible:
+                                    print("  Modal abierto correctamente mediante forzado DOM")
+                                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                                else:
+                                    print("  No se pudo abrir el modal con ningún método")
+                            except Exception as final_error:
+                                print(f"  Error en intento final: {str(final_error)}")
+                    except Exception as check_error:
+                        print(f"  Error al verificar si el modal está visible: {str(check_error)}")
+                    
+                    self._cerrar_modal()
+                    # Solo procesar la primera lupa
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    continue
+                    
+            return True
+        except Exception as e:
+            self._manejar_error(e)
+            return False
+
+    def _procesar_contenido(self, tab_name, caratulado):
+        try:
+            print(f"[INFO] Procesando movimientos en Corte Apelaciones (principal)...")
+            
+            # Verificar si el modal está en estado usable
+            modal_usable = self.page.evaluate(f"""
+                () => {{
+                    const modal = document.querySelector('{self.config["modal_selector"]}');
+                    if (!modal) return false;
+                    
+                    // Verificar si hay contenido visible
+                    const tables = modal.querySelectorAll('table');
+                    if (!tables || tables.length === 0) return false;
+                    
+                    return true;
+                }}
+            """)
+            
+            if not modal_usable:
+                print("[WARN] El modal parece estar en estado bloqueado o incompleto. Intentando recuperarlo...")
+                
+                # Intentar "reparar" el modal inyectando contenido básico si está vacío
+                self.page.evaluate(f"""
+                    () => {{
+                        const modal = document.querySelector('{self.config["modal_selector"]}');
+                        if (!modal) return false;
+                        
+                        // Si la estructura interna parece incompleta, intentamos reiniciarla
+                        const modalBody = modal.querySelector('.modal-body');
+                        if (!modalBody || !modalBody.children || modalBody.children.length === 0) {{
+                            console.log('Intentando recuperar modal vacío...');
+                            
+                            // Asegurarse de que el modal está visible y accesible
+                            modal.style.display = 'block';
+                            modal.classList.add('in');
+                            document.body.classList.add('modal-open');
+                            
+                            // Tomar una captura del estado actual para diagnóstico
+                            return true;
+                        }}
+                    }}
+                """)
+                
+                # Ya que el modal está en estado inestable, lo mejor es cerrar y continuar
+                print("[INFO] Modal en estado inconsistente. Guardando captura y continuando...")
+                
+                # Guardar una captura de pantalla del estado actual
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                if not os.path.exists(carpeta_caratulado):
+                    os.makedirs(carpeta_caratulado)
+                    
+                try:
+                    # Intentar capturar el estado del modal para diagnóstico
+                    modal = self.page.query_selector(self.config["modal_selector"])
+                    if modal:
+                        capture_path = f"{carpeta_caratulado}/modal_estado_bloqueado.png"
+                        self.page.screenshot(path=capture_path)
+                        print(f"[INFO] Captura del estado bloqueado guardada en: {capture_path}")
+                except Exception as capture_error:
+                    print(f"[WARN] No se pudo guardar captura: {str(capture_error)}")
+                    
+                # No seguir procesando, solo cerrar el modal
+                return False
+            
+            # Asegurarse de que el tab-pane "movimientosApe" está activo
+            print("[INFO] Verificando y activando el tab-pane de movimientos...")
+            tab_activo = self.page.evaluate("""
+                () => {
+                    // Verificar si el tab movimientosApe ya está activo
+                    const tabMovimientos = document.querySelector('#movimientosApe');
+                    if (tabMovimientos && tabMovimientos.classList.contains('active')) {
+                        return true;
+                    }
+                    
+                    // Si no está activo, intentar activarlo
+                    const tabLink = document.querySelector('a[href="#movimientosApe"]');
+                    if (tabLink) {
+                        tabLink.click();
+                        return true;
+                    }
+                    
+                    return false;
+                }
+            """)
+            
+            if not tab_activo:
+                print("[WARN] No se pudo activar el tab-pane de movimientos, intentando de forma alternativa...")
+                try:
+                    # Intentar clic directo en el tab
+                    self.page.click('a[href="#movimientosApe"]')
+                    random_sleep(1, 2)
+                    
+                    # Verificar si se activó
+                    tab_activado = self.page.evaluate('() => document.querySelector("#movimientosApe").classList.contains("active")')
+                    if not tab_activado:
+                        print("[WARN] No se pudo activar el tab después de múltiples intentos")
+                except Exception as tab_error:
+                    print(f"[ERROR] Error al intentar activar el tab: {str(tab_error)}")
+            
+            # Esperar brevemente para asegurar que el tab-pane esté visible
+            random_sleep(1, 2)
+            
+            # Si llegamos aquí, el modal parece estar en buen estado
+            # Continuar con el procesamiento normal
+            panel = self.page.query_selector("table.table-titulos")
+            numero_causa = None
+            if panel:
+                try:
+                    panel.scroll_into_view_if_needed()
+                    random_sleep(1, 2)
+                    try:
+                        libro_td = panel.query_selector("td:has-text('Libro')")
+                        if libro_td:
+                            libro_text = libro_td.inner_text()
+                            match = re.search(r"/\s*(\d+)", libro_text)
+                            if match:
+                                numero_causa = match.group(1)
+                                print(f"[INFO] Número de causa extraído: {numero_causa}")
+                    except Exception as e:
+                        print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
+                except Exception as scroll_error:
+                    print(f"[WARN] No se pudo hacer scroll al panel: {str(scroll_error)}")
+                    # Crear una captura de pantalla del estado actual del modal
+                    carpeta_general = tab_name.replace(' ', '_')
+                    carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                    if not os.path.exists(carpeta_caratulado):
+                        os.makedirs(carpeta_caratulado)
+                    captura_path = f"{carpeta_caratulado}/modal_error_scroll.png"
+                    self.page.screenshot(path=captura_path)
+                    print(f"[INFO] Captura del error de scroll guardada en: {captura_path}")
+                    return False
+            else:
+                print("[WARN] No se encontró el panel de información")
+                
+            try:
+                # Usar timeout más bajo para no esperar demasiado si la tabla no está disponible
+                # Usar un selector más específico para la tabla correcta dentro del tab-pane activo
+                self.page.wait_for_selector("#modalDetalleMisCauApelaciones #movimientosApe table.table-bordered", timeout=5000)
+                movimientos = self.page.query_selector_all("#modalDetalleMisCauApelaciones #movimientosApe table.table-bordered tbody tr")
+                print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
+            except Exception as table_error:
+                print(f"[WARN] No se pudo encontrar la tabla de movimientos: {str(table_error)}")
+                return False
+                
+            movimientos_nuevos = False
+            for movimiento in movimientos:
+                try:
+                    folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
+                    fecha_tramite_str = movimiento.query_selector("td:nth-child(6)").inner_text().strip()  # Fecha
+                    if fecha_tramite_str == "20/01/2023":
+                        movimientos_nuevos = True
+                        carpeta_general = tab_name.replace(' ', '_')
+                        carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                        if not os.path.exists(carpeta_caratulado):
+                            os.makedirs(carpeta_caratulado)
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        if panel:
+                            try:
+                                panel.screenshot(path=detalle_panel_path)
+                                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                            except Exception as panel_error:
+                                print(f"[WARN] No se pudo capturar el panel: {str(panel_error)}")
+                        pdf_form = movimiento.query_selector("form[name='frmDoc']")
+                        if pdf_form:
+                            token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
+                            causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
+                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            if token:
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/apelaciones/documentos/docCausaApelaciones.php?valorDoc="
+                                original_url = base_url + token
+                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                if pdf_descargado:
+                                    try:
+                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                        if images and len(images) > 0:
+                                            images[0].save(preview_path, 'PNG')
+                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        else:
+                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                    except Exception as prev_error:
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                        else:
+                            print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                except Exception as e:
+                    print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                    continue
+            return movimientos_nuevos
+        except Exception as e:
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
+            return False
+
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        # La pestaña de Apelaciones no tiene subpestañas, por lo que no hacemos nada
+        pass
+
+class ControladorLupaCivil(ControladorLupa):
+    def obtener_config(self):
+        return {
+            'lupa_selector': "#dtaTableDetalleMisCauCiv a[href*='modalAnexoCausaCivil']",
+            'modal_selector': "#modalDetalleMisCauCivil",
+            'modal_title': "Detalle Causa",
+            'table_selector': ".modal-content table.table-bordered",
+            'expected_headers': ['Folio', 'Doc.', 'Anexo', 'Etapa', 'Trámite', 'Desc. Trámite', 'Fec. Trámite', 'Foja', 'Georeferencia'],
+            'process_content': True
+        }
+
+    def manejar(self, tab_name):
+        try:
+            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            
+            # Mejorar el manejo de lupas para Civil
+            for idx, lupa_link in enumerate(lupas):
+                try:
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 4:
+                        continue
+                    caratulado = tds[3].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    
+                    # Hacer clic en la lupa usando JavaScript
+                    self.page.evaluate("""
+                        (link) => {
+                            if (link && typeof link.click === 'function') {
+                                link.click();
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        }
+                    """, lupa_link)
+                    
+                    random_sleep(2, 3)
+                    
+                    # Verificar si el modal está visible
+                    try:
+                        self._verificar_modal()
+                        print("  Modal abierto correctamente")
+                        
+                        # Verificar tabla y procesar contenido
+                        tabla_visible = self.page.evaluate("""
+                            () => {
+                                const tabla = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-bordered");
+                                return !!tabla && (tabla.offsetWidth > 0 && tabla.offsetHeight > 0);
+                            }
+                        """)
+                        
+                        if tabla_visible:
+                            print("  Tabla encontrada, procesando contenido...")
+                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                        else:
+                            print("  No se encontró la tabla visible")
+                    except Exception as modal_error:
+                        print(f"  Error al verificar modal o tabla: {str(modal_error)}")
+                        
+                    # Cerrar el modal
+                    self._cerrar_modal()
+                    
+                    # Solo procesar la primera lupa
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    continue
+                    
+            return True
+        except Exception as e:
+            self._manejar_error(e)
+            return False
+
+    def _procesar_contenido(self, tab_name, caratulado):
+        try:
+            print(f"[INFO] Procesando movimientos en Civil...")
+            
+            # Intentar usar JavaScript para acceder directamente a la información
+            info_data = self.page.evaluate("""
+                () => {
+                    const resultado = {
+                        movimientos: [],
+                        numero_causa: null
+                    };
+                    
+                    // Intentar extraer el número de causa
+                    const panelInfo = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-titulos");
+                    if (panelInfo) {
+                        const libroCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('Libro'));
+                        if (libroCelda) {
+                            const libroText = libroCelda.textContent;
+                            const match = libroText.match(/\\/\\s*(\\d+)/);
+                            if (match) {
+                                resultado.numero_causa = match[1];
+                            }
+                        }
+                    }
+                    
+                    // Obtener movimientos
+                    const tabla = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-bordered");
+                    if (tabla) {
+                        const filas = tabla.querySelectorAll('tbody tr');
+                        filas.forEach(fila => {
+                            const celdas = fila.querySelectorAll('td');
+                            if (celdas.length >= 8) { // Asegurando que tiene suficientes columnas
+                                const movimiento = {
+                                    folio: celdas[0].textContent.trim(),
+                                    fecha: celdas[6].textContent.trim(), // Índice 6 para Fec. Trámite
+                                    tiene_pdf: !!fila.querySelector('form[name="form"]'),
+                                    token: fila.querySelector('form[name="form"] input[name="dtaDoc"]')?.value || null
+                                };
+                                resultado.movimientos.push(movimiento);
+                            }
+                        });
+                    }
+                    
+                    return resultado;
+                }
+            """)
+            
+            if info_data and 'numero_causa' in info_data:
+                numero_causa = info_data['numero_causa']
+                if numero_causa:
+                    print(f"[INFO] Número de causa extraído: {numero_causa}")
+                    
+                movimientos = info_data.get('movimientos', [])
+                print(f"[INFO] Se encontraron {len(movimientos)} movimientos mediante JavaScript")
+                
+                movimientos_nuevos = False
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                
+                # Asegurar que la carpeta existe
+                if not os.path.exists(carpeta_caratulado):
+                    os.makedirs(carpeta_caratulado)
+                
+                # Capturar la información visible del modal
+                try:
+                    modal_body = self.page.query_selector("#modalDetalleMisCauCivil .modal-body")
+                    if modal_body:
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        modal_body.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del modal guardada: {detalle_panel_path}")
+                except Exception as screenshot_error:
+                    print(f"[ERROR] Error al capturar el modal: {str(screenshot_error)}")
+                
+                for movimiento in movimientos:
+                    try:
+                        fecha_tramite_str = movimiento.get('fecha', '')
+                        folio = movimiento.get('folio', '')
+                        
+                        if fecha_tramite_str == "07/10/2024":
+                            movimientos_nuevos = True
+                            print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
+                            
+                            if movimiento.get('tiene_pdf') and movimiento.get('token'):
+                                causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
+                                pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                                
+                                token = movimiento.get('token')
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuS.php?dtaDoc="
+                                original_url = base_url + token
+                                
+                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                if pdf_descargado:
+                                    try:
+                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                        if images and len(images) > 0:
+                                            images[0].save(preview_path, 'PNG')
+                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        else:
+                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                    except Exception as prev_error:
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                            else:
+                                print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                    except Exception as e:
+                        print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                        continue
+                        
+                return movimientos_nuevos
+            else:
+                print("[WARN] No se pudo extraer información mediante JavaScript")
+                return False
+        except Exception as e:
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
+            return False
+
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        # Civil no tiene subpestañas, por lo que no hacemos nada
+        pass
+
+class ControladorLupaCobranza(ControladorLupa):
+    def obtener_config(self):
+        return {
+            'lupa_selector': "#dtaTableDetalleMisCauCob a[href*='modalAnexoCausaCobranza']",
+            'modal_selector': "#modalDetalleMisCauCobranza",
+            'modal_title': "Detalle Causa",
+            'table_selector': ".modal-content table.table-bordered",
+            'expected_headers': ['Folio', 'Doc.', 'Anexo', 'Etapa', 'Trámite', 'Desc. Trámite', 'Estado Firma', 'Fec. Trámite', 'Georeferencia'],
+            'process_content': True
+        }
+
+    def manejar(self, tab_name):
+        try:
+            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            
+            # Mejorar el manejo de lupas para Cobranza
+            for idx, lupa_link in enumerate(lupas):
+                try:
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 4:
+                        continue
+                    caratulado = tds[3].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    
+                    # Hacer clic en la lupa usando JavaScript
+                    self.page.evaluate("""
+                        (link) => {
+                            if (link && typeof link.click === 'function') {
+                                link.click();
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        }
+                    """, lupa_link)
+                    
+                    random_sleep(2, 3)
+                    
+                    # Verificar si el modal está visible
+                    try:
+                        self._verificar_modal()
+                        print("  Modal abierto correctamente")
+                        
+                        # Verificar tabla y procesar contenido
+                        tabla_visible = self.page.evaluate("""
+                            () => {
+                                const tabla = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-bordered");
+                                return !!tabla && (tabla.offsetWidth > 0 && tabla.offsetHeight > 0);
+                            }
+                        """)
+                        
+                        if tabla_visible:
+                            print("  Tabla encontrada, procesando contenido...")
+                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                        else:
+                            print("  No se encontró la tabla visible")
+                    except Exception as modal_error:
+                        print(f"  Error al verificar modal o tabla: {str(modal_error)}")
+                        
+                    # Cerrar el modal
+                    self._cerrar_modal()
+                    
+                    # Solo procesar la primera lupa
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    continue
+                    
+            return True
+        except Exception as e:
+            self._manejar_error(e)
+            return False
+
+    def _procesar_contenido(self, tab_name, caratulado):
+        try:
+            print(f"[INFO] Procesando movimientos en Cobranza...")
+            
+            # Intentar usar JavaScript para acceder directamente a la información
+            info_data = self.page.evaluate("""
+                () => {
+                    const resultado = {
+                        movimientos: [],
+                        numero_causa: null
+                    };
+                    
+                    // Intentar extraer el número de causa
+                    const panelInfo = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-titulos");
+                    if (panelInfo) {
+                        const libroCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('Libro'));
+                        if (libroCelda) {
+                            const libroText = libroCelda.textContent;
+                            const match = libroText.match(/\\/\\s*(\\d+)/);
+                            if (match) {
+                                resultado.numero_causa = match[1];
+                            }
+                        }
+                    }
+                    
+                    // Obtener movimientos
+                    const tabla = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-bordered");
+                    if (tabla) {
+                        const filas = tabla.querySelectorAll('tbody tr');
+                        filas.forEach(fila => {
+                            const celdas = fila.querySelectorAll('td');
+                            if (celdas.length >= 8) { // Asegurando que tiene suficientes columnas
+                                const movimiento = {
+                                    folio: celdas[0].textContent.trim(),
+                                    fecha: celdas[7].textContent.trim(), // Índice 7 para Fec. Trámite
+                                    tiene_pdf: !!fila.querySelector('form[name="frmDocH"]'),
+                                    token: fila.querySelector('form[name="frmDocH"] input[name="dtaDoc"]')?.value || null
+                                };
+                                resultado.movimientos.push(movimiento);
+                            }
+                        });
+                    }
+                    
+                    return resultado;
+                }
+            """)
+            
+            if info_data and 'numero_causa' in info_data:
+                numero_causa = info_data['numero_causa']
+                if numero_causa:
+                    print(f"[INFO] Número de causa extraído: {numero_causa}")
+                    
+                movimientos = info_data.get('movimientos', [])
+                print(f"[INFO] Se encontraron {len(movimientos)} movimientos mediante JavaScript")
+                
+                movimientos_nuevos = False
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                
+                # Asegurar que la carpeta existe
+                if not os.path.exists(carpeta_caratulado):
+                    os.makedirs(carpeta_caratulado)
+                
+                # Capturar la información visible del modal
+                try:
+                    modal_body = self.page.query_selector("#modalDetalleMisCauCobranza .modal-body")
+                    if modal_body:
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        modal_body.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del modal guardada: {detalle_panel_path}")
+                except Exception as screenshot_error:
+                    print(f"[ERROR] Error al capturar el modal: {str(screenshot_error)}")
+                
+                for movimiento in movimientos:
+                    try:
+                        fecha_tramite_str = movimiento.get('fecha', '')
+                        folio = movimiento.get('folio', '')
+                        
+                        if fecha_tramite_str == "13/12/2024":
+                            movimientos_nuevos = True
+                            print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
+                            
+                            if movimiento.get('tiene_pdf') and movimiento.get('token'):
+                                causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
+                                pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                                
+                                token = movimiento.get('token')
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/cobranza/documentos/docuCobranza.php?dtaDoc="
+                                original_url = base_url + token
+                                
+                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                if pdf_descargado:
+                                    try:
+                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                        if images and len(images) > 0:
+                                            images[0].save(preview_path, 'PNG')
+                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        else:
+                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                    except Exception as prev_error:
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                            else:
+                                print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                    except Exception as e:
+                        print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                        continue
+                        
+                return movimientos_nuevos
+            else:
+                print("[WARN] No se pudo extraer información mediante JavaScript")
+                return False
+        except Exception as e:
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
+            return False
+
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        # Cobranza no tiene subpestañas, por lo que no hacemos nada
+        pass
 
 def obtener_controlador_lupa(tipo, page):
     controladores = {
         'suprema': ControladorLupaSuprema,
-        'apelaciones': ControladorLupaApelaciones
+        'apelaciones': ControladorLupaApelacionesPrincipal,
+        'apelaciones_principal': ControladorLupaApelacionesPrincipal,
+        'civil': ControladorLupaCivil,
+        'cobranza': ControladorLupaCobranza
     }
     controlador_clase = controladores.get(tipo)
     if not controlador_clase:
@@ -906,6 +1684,15 @@ def lupa(page, config):
     controlador = obtener_controlador_lupa(config['tipo'], page)
     return controlador.manejar(config['tab_name'])
 
+# Mapeo de pestañas a tipo de lupa
+TIPO_LUPA_MAP = {
+    "Corte Suprema": "suprema",
+    "Corte Apelaciones": "apelaciones_principal",
+    "Civil": "civil",
+    "Cobranza": "cobranza"
+    # Puedes agregar más si tienes los selectores
+}
+
 def navigate_mis_causas_tabs(page):
     """Navega por todas las pestañas en la sección Mis Causas"""
     print("\n--- Navegando por pestañas de Mis Causas ---")
@@ -921,6 +1708,73 @@ def navigate_mis_causas_tabs(page):
             if tab_name in visited_tabs:
                 print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
                 continue
+            
+            # Tratamiento especial para la pestaña "Corte Apelaciones"
+            if tab_name == "Corte Apelaciones":
+                print("  Implementando estrategia especial para Corte Apelaciones...")
+                
+                # Refrescar la página para asegurar un estado limpio
+                print("  Refrescando la página...")
+                page.reload()
+                random_sleep(3, 5)
+                
+                # Volver a navegar a Mis Causas
+                print("  Navegando de nuevo a 'Mis Causas'...")
+                try:
+                    # Intentar hacer clic mediante JavaScript
+                    page.evaluate("misCausas();")
+                    print("  Navegación a 'Mis Causas' mediante JS exitosa!")
+                except Exception as js_error:
+                    print(f"  Error al ejecutar JavaScript: {str(js_error)}")
+                    
+                    # Intento alternativo haciendo clic directamente en el elemento
+                    try:
+                        page.click("a:has-text('Mis Causas')")
+                        print("  Navegación a 'Mis Causas' mediante clic directo exitosa!")
+                    except Exception as click_error:
+                        print(f"  Error al hacer clic directo: {str(click_error)}")
+                        continue
+                
+                # Esperar a que cargue la página
+                random_sleep(3, 5)
+            
+            # Antes de cambiar de pestaña, verificamos si hay modales abiertos y los cerramos
+            try:
+                any_modal_open = page.evaluate("""
+                    () => {
+                        return !!document.querySelector('.modal.in, .modal[style*="display: block"]') || 
+                               !!document.querySelector('.modal-backdrop') ||
+                               document.body.classList.contains('modal-open');
+                    }
+                """)
+                
+                if any_modal_open:
+                    print("  Se detectaron modales abiertos. Intentando cerrarlos antes de cambiar de pestaña...")
+                    page.evaluate("""
+                        () => {
+                            // Asegurar que no queden modales visibles
+                            document.querySelectorAll('.modal.in, .modal[style*="display: block"]').forEach(modal => {
+                                modal.style.display = 'none';
+                                modal.classList.remove('in');
+                            });
+                            
+                            // Asegurar que el body no tenga la clase modal-open
+                            document.body.classList.remove('modal-open');
+                            
+                            // Eliminar todos los backdrops
+                            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                                if (backdrop.parentNode) {
+                                    backdrop.parentNode.removeChild(backdrop);
+                                }
+                            });
+                            
+                            return true;
+                        }
+                    """)
+                    # Esperar a que terminen de cerrarse los modales
+                    random_sleep(2, 3)
+            except Exception as modal_error:
+                print(f"  Error al intentar cerrar modales antes del cambio de pestaña: {str(modal_error)}")
             
             # Pausa antes de cambiar de pestaña
             random_sleep(3, 5)
@@ -946,41 +1800,60 @@ def navigate_mis_causas_tabs(page):
             random_sleep(2, 4)
             
             # Ejecutar la función de búsqueda si está definida para esta pestaña
-            if tab_name in TAB_FUNCTIONS:
-                try:
-                    # Manejar la lupa de Corte Suprema pasando el nombre exacto de la pestaña
-                    if not lupa(page, {'tipo': 'suprema', 'tab_name': tab_name}):
-                        print(f"  Error al manejar la lupa de Corte Suprema en pestaña '{tab_name}'")
-                        continue
-
-                    # Si estamos en Corte Suprema, también procesamos la segunda pestaña
-                    if tab_name == "Corte Suprema":
-                        # Cambiar a la pestaña "Expediente Corte Apelaciones"
-                        print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
-                        try:
-                            page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
-                            page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
-                            page.wait_for_selector("#corteApelaciones", timeout=5000)
-                            random_sleep(1, 2)
-                            
-                            # Manejar la lupa de Corte Apelaciones
-                            if not lupa(page, {'tipo': 'apelaciones', 'tab_name': tab_name}):
-                                print(f"  Error al manejar la lupa de apelaciones en pestaña '{tab_name}'")
-                                continue
-                            
-                        except Exception as tab_error:
-                            print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(tab_error)}")
-                            continue
+            tipo_lupa = TIPO_LUPA_MAP.get(tab_name)
+            if tipo_lupa:
+                if not lupa(page, {'tipo': tipo_lupa, 'tab_name': tab_name}):
+                    print(f"  Error al manejar la lupa de {tab_name}")
                     
-                except Exception as e:
-                    print(f"  Error al hacer clic en ícono de lupa: {str(e)}")
- 
-            
+                # Esperamos un tiempo adicional después de procesar las lupas
+                # para asegurarnos de que todo está cerrado correctamente
+                random_sleep(3, 5)
+                    
+                # Verificar si quedaron modales abiertos
+                try:
+                    any_modal_open = page.evaluate("""
+                        () => {
+                            return !!document.querySelector('.modal.in, .modal[style*="display: block"]') || 
+                                   !!document.querySelector('.modal-backdrop') ||
+                                   document.body.classList.contains('modal-open');
+                        }
+                    """)
+                    
+                    if any_modal_open:
+                        print("  ALERTA: Quedaron modales abiertos después de procesar lupas. Intentando cerrarlos...")
+                        page.evaluate("""
+                            () => {
+                                // Asegurar que no queden modales visibles
+                                document.querySelectorAll('.modal.in, .modal[style*="display: block"]').forEach(modal => {
+                                    modal.style.display = 'none';
+                                    modal.classList.remove('in');
+                                });
+                                
+                                // Asegurar que el body no tenga la clase modal-open
+                                document.body.classList.remove('modal-open');
+                                
+                                // Eliminar todos los backdrops
+                                document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                                    if (backdrop.parentNode) {
+                                        backdrop.parentNode.removeChild(backdrop);
+                                    }
+                                });
+                                
+                                return true;
+                            }
+                        """)
+                        # Esperar a que terminen de cerrarse los modales
+                        random_sleep(2, 3)
+                except Exception as modal_check_error:
+                    print(f"  Error al verificar modales abiertos: {str(modal_check_error)}")
+                
             # Pausa después de procesar cada pestaña
             random_sleep(3, 5)
             
         except Exception as e:
             print(f"  Error navegando a pestaña '{tab_name}': {str(e)}")
+            # Si ocurre un error, intentamos seguir con la siguiente pestaña
+            continue
 
     
     print("--- Finalizada navegación por pestañas de Mis Causas ---\n")
