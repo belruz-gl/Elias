@@ -1400,13 +1400,15 @@ class ControladorLupaCivil(ControladorLupa):
                 
                 # Capturar la información visible del modal
                 try:
-                    modal_body = self.page.query_selector("#modalDetalleMisCauCivil .modal-body")
-                    if modal_body:
+                    panel_principal = self.page.query_selector("#modalDetalleMisCauCivil .modal-body .panel.panel-default")
+                    if panel_principal:
                         detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                        modal_body.screenshot(path=detalle_panel_path)
-                        print(f"[INFO] Captura del modal guardada: {detalle_panel_path}")
+                        panel_principal.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del panel principal guardada: {detalle_panel_path}")
+                    else:
+                        print("[WARN] No se encontró el panel principal para capturar")
                 except Exception as screenshot_error:
-                    print(f"[ERROR] Error al capturar el modal: {str(screenshot_error)}")
+                    print(f"[ERROR] Error al capturar el panel principal: {str(screenshot_error)}")
                 
                 for movimiento in movimientos:
                     try:
@@ -1603,13 +1605,15 @@ class ControladorLupaCobranza(ControladorLupa):
                 
                 # Capturar la información visible del modal
                 try:
-                    modal_body = self.page.query_selector("#modalDetalleMisCauCobranza .modal-body")
-                    if modal_body:
+                    panel_principal = self.page.query_selector("#modalDetalleMisCauCobranza .modal-body table.table-titulos")
+                    if panel_principal:
                         detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                        modal_body.screenshot(path=detalle_panel_path)
-                        print(f"[INFO] Captura del modal guardada: {detalle_panel_path}")
+                        panel_principal.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del panel principal guardada: {detalle_panel_path}")
+                    else:
+                        print("[WARN] No se encontró el panel principal para capturar")
                 except Exception as screenshot_error:
-                    print(f"[ERROR] Error al capturar el modal: {str(screenshot_error)}")
+                    print(f"[ERROR] Error al capturar el panel principal: {str(screenshot_error)}")
                 
                 for movimiento in movimientos:
                     try:
