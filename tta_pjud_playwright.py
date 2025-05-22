@@ -1365,6 +1365,36 @@ class ControladorLupaCobranza(ControladorLupa):
         try:
             print(f"[INFO] Procesando movimientos en Cobranza...")
             
+            # Esperar y capturar el panel de información
+            self.page.wait_for_selector("#modalDetalleMisCauCobranza table.table-titulos", timeout=10000)
+            panel = self.page.query_selector("#modalDetalleMisCauCobranza table.table-titulos")
+            
+            if panel:
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                if not os.path.exists(carpeta_caratulado):
+                    os.makedirs(carpeta_caratulado)
+                
+                detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                panel.screenshot(path=detalle_panel_path)
+                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                
+                # Extraer el número de causa del RIT
+                try:
+                    rit_td = panel.query_selector("td:has-text('RIT')")
+                    if rit_td:
+                        rit_text = rit_td.inner_text()
+                        match = re.search(r'D-(\d+)-', rit_text)
+                        if match:
+                            numero_causa = match.group(1)
+                            print(f"[INFO] Número de causa extraído: {numero_causa}")
+                except Exception as e:
+                    print(f"[WARN] No se pudo extraer el número de causa: {str(e)}")
+                    numero_causa = None
+            else:
+                print("[WARN] No se encontró el panel de información")
+                numero_causa = None
+            
             # Intentar usar JavaScript para acceder directamente a la información
             info_data = self.page.evaluate("""
                 () => {
@@ -1372,19 +1402,6 @@ class ControladorLupaCobranza(ControladorLupa):
                         movimientos: [],
                         numero_causa: null
                     };
-                    
-                    // Intentar extraer el número de causa del formato D-<número>-<año>
-                    const panelInfo = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-titulos");
-                    if (panelInfo) {
-                        const ritCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('RIT'));
-                        if (ritCelda) {
-                            const ritText = ritCelda.textContent;
-                            const match = ritText.match(/D-(\\d+)-/);
-                            if (match) {
-                                resultado.numero_causa = match[1];
-                            }
-                        }
-                    }
                     
                     // Obtener movimientos
                     const tabla = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-bordered");
@@ -1408,33 +1425,11 @@ class ControladorLupaCobranza(ControladorLupa):
                 }
             """)
             
-            if info_data and 'numero_causa' in info_data:
-                numero_causa = info_data['numero_causa']
-                if numero_causa:
-                    print(f"[INFO] Número de causa extraído: {numero_causa}")
-                    
+            if info_data:
                 movimientos = info_data.get('movimientos', [])
                 print(f"[INFO] Se encontraron {len(movimientos)} movimientos mediante JavaScript")
                 
                 movimientos_nuevos = False
-                carpeta_general = tab_name.replace(' ', '_')
-                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                
-                # Asegurar que la carpeta existe
-                if not os.path.exists(carpeta_caratulado):
-                    os.makedirs(carpeta_caratulado)
-                
-                # Capturar la información visible del modal
-                try:
-                    panel_principal = self.page.query_selector("#modalDetalleMisCauCobranza .modal-body table.table-titulos")
-                    if panel_principal:
-                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                        panel_principal.screenshot(path=detalle_panel_path)
-                        print(f"[INFO] Captura del panel principal guardada: {detalle_panel_path}")
-                    else:
-                        print("[WARN] No se encontró el panel principal para capturar")
-                except Exception as screenshot_error:
-                    print(f"[ERROR] Error al capturar el panel principal: {str(screenshot_error)}")
                 
                 for movimiento in movimientos:
                     try:
