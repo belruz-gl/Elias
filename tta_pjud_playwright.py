@@ -1320,78 +1320,6 @@ class ControladorLupaCobranza(ControladorLupa):
             'process_content': True
         }
 
-    def manejar(self, tab_name):
-        try:
-            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
-            lupas = self._obtener_lupas()
-            if not lupas:
-                print("  No se encontraron lupas en la pestaña.")
-                return False
-            
-            # Mejorar el manejo de lupas para Cobranza
-            for idx, lupa_link in enumerate(lupas):
-                try:
-                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
-                    tds = fila.query_selector_all('td')
-                    if len(tds) < 4:
-                        continue
-                    caratulado = tds[3].inner_text().strip().replace('/', '_')
-                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
-                    
-                    lupa_link.scroll_into_view_if_needed()
-                    random_sleep(0.5, 1)
-                    
-                    # Hacer clic en la lupa usando JavaScript
-                    self.page.evaluate("""
-                        (link) => {
-                            if (link && typeof link.click === 'function') {
-                                link.click();
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        }
-                    """, lupa_link)
-                    
-                    random_sleep(2, 3)
-                    
-                    # Verificar si el modal está visible
-                    try:
-                        self._verificar_modal()
-                        print("  Modal abierto correctamente")
-                        
-                        # Verificar tabla y procesar contenido
-                        tabla_visible = self.page.evaluate("""
-                            () => {
-                                const tabla = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-bordered");
-                                return !!tabla && (tabla.offsetWidth > 0 && tabla.offsetHeight > 0);
-                            }
-                        """)
-                        
-                        if tabla_visible:
-                            print("  Tabla encontrada, procesando contenido...")
-                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
-                        else:
-                            print("  No se encontró la tabla visible")
-                    except Exception as modal_error:
-                        print(f"  Error al verificar modal o tabla: {str(modal_error)}")
-                        
-                    # Cerrar el modal
-                    self._cerrar_modal()
-                    
-                    # Solo procesar la primera lupa
-                    break
-                    
-                except Exception as e:
-                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
-                    self._manejar_error(e)
-                    continue
-                    
-            return True
-        except Exception as e:
-            self._manejar_error(e)
-            return False
-
     def _procesar_contenido(self, tab_name, caratulado):
         try:
             print(f"[INFO] Procesando movimientos en Cobranza...")
@@ -1404,13 +1332,13 @@ class ControladorLupaCobranza(ControladorLupa):
                         numero_causa: null
                     };
                     
-                    // Intentar extraer el número de causa
+                    // Intentar extraer el número de causa del formato D-<número>-<año>
                     const panelInfo = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-titulos");
                     if (panelInfo) {
-                        const libroCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('Libro'));
-                        if (libroCelda) {
-                            const libroText = libroCelda.textContent;
-                            const match = libroText.match(/\\/\\s*(\\d+)/);
+                        const ritCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('RIT'));
+                        if (ritCelda) {
+                            const ritText = ritCelda.textContent;
+                            const match = ritText.match(/D-(\\d+)-/);
                             if (match) {
                                 resultado.numero_causa = match[1];
                             }
@@ -1477,8 +1405,7 @@ class ControladorLupaCobranza(ControladorLupa):
                             print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
                             
                             if movimiento.get('tiene_pdf') and movimiento.get('token'):
-                                causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
-                                pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                pdf_filename = f"{carpeta_caratulado}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
                                 preview_path = pdf_filename.replace('.pdf', '_preview.png')
                                 
                                 token = movimiento.get('token')
