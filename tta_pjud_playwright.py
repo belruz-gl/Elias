@@ -35,8 +35,9 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Mobile Safari/537.36"
 ]
 
+#Configura y retorna un navegador con Playwright
 def setup_browser():
-    """Configura y retorna un navegador con Playwright"""
+
     playwright = sync_playwright().start()
     
     # Seleccionar un user agent aleatorio
@@ -107,13 +108,12 @@ def setup_browser():
     
     return playwright, browser, page
 
+#Espera un tiempo aleatorio entre min_seconds y max_seconds
 def random_sleep(min_seconds=1, max_seconds=3):
-    """Espera un tiempo aleatorio entre min_seconds y max_seconds"""
     time.sleep(random.uniform(min_seconds, max_seconds))
 
-
+#Simula varios comportamientos humanos aleatorios
 def simulate_human_behavior(page):
-    """Simula varios comportamientos humanos aleatorios"""
     # Scroll aleatorio
     if random.random() < 0.3:  # 30% de probabilidad
         page.mouse.wheel(0, random.randint(100, 500))
@@ -126,8 +126,8 @@ def simulate_human_behavior(page):
         page.mouse.move(x, y)
         random_sleep(0.5, 1.5)
 
+#Realiza el proceso de login
 def login(page, username, password):
-    """Realiza el proceso de login"""
     try:
         print("Esperando página de Clave Única...")
         random_sleep(2, 4)
@@ -164,8 +164,8 @@ def login(page, username, password):
         print(f"Error durante el proceso de login: {str(e)}") 
         return False
 
+#Navega a la sección Mis Causas
 def navigate_to_mis_causas(page):
-    """Navega a la sección Mis Causas"""
     try:
         print("Navegando a 'Mis Causas'...")
         
@@ -193,10 +193,8 @@ def navigate_to_mis_causas(page):
         print(f"Error al navegar a 'Mis Causas': {str(e)}")
         return False
 
+#Descarga un PDF desde una URL directa usando las cookies de sesión.
 def descargar_pdf_directo(pdf_url, pdf_filename, page):
-    """
-    Descarga un PDF desde una URL directa usando las cookies de sesión.
-    """
     try:
         cookies_list = page.context.cookies()
         cookie_header = '; '.join([f"{c['name']}={c['value']}" for c in cookies_list])
@@ -317,6 +315,7 @@ def verificar_movimientos_nuevos(page, tab_name):
         print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
         return False
 
+#Lupa es lo mismo que decir causa
 class ControladorLupa:
     def __init__(self, page):
         self.page = page
@@ -356,7 +355,7 @@ class ControladorLupa:
                     self._cambiar_pestana_modal(caratulado, tab_name)
                     self._cerrar_modal()
                     
-                    # Solo procesar la primera lupa por ahora para evitar problemas
+                    #break para procesar solo la primera lupa por ahora
                     break
                     
                 except Exception as e:
@@ -1694,7 +1693,6 @@ TIPO_LUPA_MAP = {
     "Corte Apelaciones": "apelaciones_principal",
     "Civil": "civil",
     "Cobranza": "cobranza"
-    # Puedes agregar más si tienes los selectores
 }
 
 def navigate_mis_causas_tabs(page):
@@ -1993,11 +1991,11 @@ def automatizar_poder_judicial(page, username, password):
                 navigate_mis_causas_tabs(page)        
             
             # 2. Navegar a Mi Estado Diario
-            estado_diario_success = navigate_to_estado_diario(page)
+           # estado_diario_success = navigate_to_estado_diario(page)
             
-            if estado_diario_success:
+            #if estado_diario_success:
                 # Navegar por las pestañas de Mi Estado Diario
-                navigate_estado_diario_tabs(page)
+             #   navigate_estado_diario_tabs(page)
             
             print("\n=== AUTOMATIZACIÓN DEL PODER JUDICIAL COMPLETADA ===\n")
             return True
