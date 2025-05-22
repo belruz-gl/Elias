@@ -1320,6 +1320,47 @@ class ControladorLupaCobranza(ControladorLupa):
             'process_content': True
         }
 
+    def manejar(self, tab_name):
+        try:
+            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            
+            for idx, lupa_link in enumerate(lupas):
+                try:
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 4:
+                        continue
+                    # Cambiar a columna 4 (índice 3) para el caratulado
+                    caratulado = tds[3].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    lupa_link.click()
+                    random_sleep(1, 2)
+                    self._verificar_modal()
+                    self._verificar_tabla()
+                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                    self._cambiar_pestana_modal(caratulado, tab_name)
+                    self._cerrar_modal()
+                    
+                    #break para procesar solo la primera lupa por ahora
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    self._cerrar_modal()
+                    continue
+            return True
+        except Exception as e:
+            self._manejar_error(e)
+            return False
+
     def _procesar_contenido(self, tab_name, caratulado):
         try:
             print(f"[INFO] Procesando movimientos en Cobranza...")
