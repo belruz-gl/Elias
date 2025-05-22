@@ -196,6 +196,11 @@ def navigate_to_mis_causas(page):
 #Descarga un PDF desde una URL directa usando las cookies de sesión.
 def descargar_pdf_directo(pdf_url, pdf_filename, page):
     try:
+        # Verificar si el archivo ya existe
+        if os.path.exists(pdf_filename):
+            print(f"[INFO] El archivo {pdf_filename} ya existe. No se descargará nuevamente.")
+            return True
+
         cookies_list = page.context.cookies()
         cookie_header = '; '.join([f"{c['name']}={c['value']}" for c in cookies_list])
         headers = {
@@ -475,11 +480,18 @@ class ControladorLupa:
                         carpeta_general = tab_name.replace(' ', '_')
                         carpeta_caratulado = f"{carpeta_general}/{caratulado}"
                         if not os.path.exists(carpeta_caratulado):
+                            print(f"[INFO] Creando carpeta: {carpeta_caratulado}")
                             os.makedirs(carpeta_caratulado)
+                        else:
+                            print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
                         detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
                         if panel:
-                            panel.screenshot(path=detalle_panel_path)
-                            print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                            # Verificar si el archivo ya existe
+                            if os.path.exists(detalle_panel_path):
+                                print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
+                            else:
+                                panel.screenshot(path=detalle_panel_path)
+                                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
                         pdf_form = movimiento.query_selector("form[name='frmPdf']")
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
@@ -492,12 +504,19 @@ class ControladorLupa:
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     try:
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            images[0].save(preview_path, 'PNG')
-                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        # Verificar si la vista previa ya existe
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
                                         else:
-                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            # Convertir la primera página del PDF a imagen
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                # Guardar solo la primera página como imagen
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
@@ -786,11 +805,18 @@ class ControladorLupaSuprema(ControladorLupa):
                         carpeta_general = tab_name.replace(' ', '_')
                         carpeta_caratulado = f"{carpeta_general}/{caratulado}"
                         if not os.path.exists(carpeta_caratulado):
+                            print(f"[INFO] Creando carpeta: {carpeta_caratulado}")
                             os.makedirs(carpeta_caratulado)
+                        else:
+                            print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
                         detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
                         if panel:
-                            panel.screenshot(path=detalle_panel_path)
-                            print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                            # Verificar si el archivo ya existe
+                            if os.path.exists(detalle_panel_path):
+                                print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
+                            else:
+                                panel.screenshot(path=detalle_panel_path)
+                                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
                         pdf_form = movimiento.query_selector("form[name='frmPdf']")
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
@@ -803,12 +829,19 @@ class ControladorLupaSuprema(ControladorLupa):
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     try:
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            images[0].save(preview_path, 'PNG')
-                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        # Verificar si la vista previa ya existe
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
                                         else:
-                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            # Convertir la primera página del PDF a imagen
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                # Guardar solo la primera página como imagen
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
@@ -1062,14 +1095,18 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                         carpeta_general = tab_name.replace(' ', '_')
                         carpeta_caratulado = f"{carpeta_general}/{caratulado}"
                         if not os.path.exists(carpeta_caratulado):
+                            print(f"[INFO] Creando carpeta: {carpeta_caratulado}")
                             os.makedirs(carpeta_caratulado)
+                        else:
+                            print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
                         detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
                         if panel:
-                            try:
+                            # Verificar si el archivo ya existe
+                            if os.path.exists(detalle_panel_path):
+                                print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
+                            else:
                                 panel.screenshot(path=detalle_panel_path)
                                 print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
-                            except Exception as panel_error:
-                                print(f"[WARN] No se pudo capturar el panel: {str(panel_error)}")
                         pdf_form = movimiento.query_selector("form[name='frmDoc']")
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
@@ -1082,12 +1119,19 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     try:
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            images[0].save(preview_path, 'PNG')
-                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        # Verificar si la vista previa ya existe
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
                                         else:
-                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            # Convertir la primera página del PDF a imagen
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                # Guardar solo la primera página como imagen
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
@@ -1283,12 +1327,19 @@ class ControladorLupaCivil(ControladorLupa):
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     try:
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            images[0].save(preview_path, 'PNG')
-                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        # Verificar si la vista previa ya existe
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
                                         else:
-                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            # Convertir la primera página del PDF a imagen
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                # Guardar solo la primera página como imagen
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                             else:
@@ -1451,12 +1502,19 @@ class ControladorLupaCobranza(ControladorLupa):
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     try:
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            images[0].save(preview_path, 'PNG')
-                                            print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                        # Verificar si la vista previa ya existe
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
                                         else:
-                                            print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            # Convertir la primera página del PDF a imagen
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                # Guardar solo la primera página como imagen
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
                                     except Exception as prev_error:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                             else:
