@@ -873,182 +873,34 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                 print("  No se encontraron lupas en la pestaña.")
                 return False
             
-            # En Corte Apelaciones, usar un enfoque diferente para abrir el modal
             for idx, lupa_link in enumerate(lupas):
                 try:
                     fila = lupa_link.evaluate_handle('el => el.closest("tr")')
                     tds = fila.query_selector_all('td')
                     if len(tds) < 4:
                         continue
+                    # Cambiar de columna 2 a columna 4 para el caratulado
                     caratulado = tds[3].inner_text().strip().replace('/', '_')
                     print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
                     
-                    # Hacer scroll para asegurar que el elemento es visible
                     lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    lupa_link.click()
                     random_sleep(1, 2)
-                    
-                    # Extraer el token de la función JavaScript en el atributo onclick
-                    onclick_attr = lupa_link.get_attribute('onclick')
-                    if onclick_attr and "detalleMisCausaApelaciones" in onclick_attr:
-                        # Extraer el token entre comillas simples
-                        import re
-                        match = re.search(r"detalleMisCausaApelaciones\('([^']+)'\)", onclick_attr)
-                        if match:
-                            token = match.group(1)
-                            print(f"  Token extraído del onclick: {token[:20]}...")
-                            
-                            # Llamar directamente a la función JavaScript con el token
-                            try:
-                                print("  Llamando directamente a la función detalleMisCausaApelaciones...")
-                                self.page.evaluate(f"detalleMisCausaApelaciones('{token}')")
-                                random_sleep(2, 3)
-                            except Exception as js_error:
-                                print(f"  Error al llamar a detalleMisCausaApelaciones: {str(js_error)}")
-                    else:
-                        # Si no hay onclick o no contiene la función esperada, intentar con métodos anteriores
-                        print("  No se encontró la función detalleMisCausaApelaciones en onclick, probando métodos alternativos...")
-                        try:
-                            print("  Intentando hacer click directo en la lupa...")
-                            lupa_link.click()
-                            random_sleep(2, 3)
-                        except Exception as click_error:
-                            print(f"  Error en click directo: {str(click_error)}")
-                            
-                            # Si falla, intentamos con JavaScript
-                            try:
-                                print("  Intentando abrir modal usando JavaScript...")
-                                href = lupa_link.get_attribute('href')
-                                if href and 'modalDetalleMisCauApelaciones' in href:
-                                    modal_id = href.replace('#', '')
-                                    
-                                    # Probamos diferentes métodos para abrir el modal
-                                    self.page.evaluate(f"""
-                                        () => {{
-                                            try {{
-                                                // 1. Intentar con jQuery (método preferido)
-                                                if (typeof $ !== 'undefined') {{
-                                                    $('#{modal_id}').modal('show');
-                                                    return 1;
-                                                }}
-                                                
-                                                // 2. Intentar disparar un evento de clic en el elemento
-                                                const link = document.querySelector('a[href="#{modal_id}"]');
-                                                if (link) {{
-                                                    link.click();
-                                                    return 2;
-                                                }}
-                                                
-                                                // 3. Manipulación directa del DOM
-                                                const modal = document.querySelector('#{modal_id}');
-                                                if (modal) {{
-                                                    modal.style.display = 'block';
-                                                    modal.classList.add('in');
-                                                    document.body.classList.add('modal-open');
-                                                    
-                                                    // Crear backdrop si no existe
-                                                    if (!document.querySelector('.modal-backdrop')) {{
-                                                        const backdrop = document.createElement('div');
-                                                        backdrop.className = 'modal-backdrop in';
-                                                        document.body.appendChild(backdrop);
-                                                    }}
-                                                    
-                                                    return 3;
-                                                }}
-                                                
-                                                return 0;
-                                            }} catch (e) {{
-                                                console.error("Error al abrir modal:", e);
-                                                return -1;
-                                            }}
-                                        }}
-                                    """)
-                            except Exception as js_error:
-                                print(f"  Error en JavaScript: {str(js_error)}")
-                    
-                    # Verificar si el modal está visible
-                    try:
-                        modal_visible = self.page.evaluate(f"""
-                            () => {{
-                                const modal = document.querySelector('{self.config["modal_selector"]}');
-                                if (!modal) return false;
-                                
-                                const style = window.getComputedStyle(modal);
-                                return style.display === 'block' || style.display === 'flex';
-                            }}
-                        """)
-                        
-                        if modal_visible:
-                            print("  Modal abierto correctamente")
-                            # Ahora podemos procesar el contenido si el modal está visible
-                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
-                        else:
-                            print("  El modal no se pudo abrir. Intentando un último método...")
-                            
-                            # Último intento: Forzar la apertura del modal mediante manipulación directa del DOM
-                            try:
-                                print("  Intentando forzar apertura del modal mediante DOM...")
-                                self.page.evaluate(f"""
-                                    () => {{
-                                        try {{
-                                            // Seleccionar el modal
-                                            const modal = document.querySelector('{self.config["modal_selector"]}');
-                                            if (!modal) return false;
-                                            
-                                            // Forzar que sea visible
-                                            modal.style.display = 'block';
-                                            modal.classList.add('in');
-                                            document.body.classList.add('modal-open');
-                                            
-                                            // Crear backdrop si no existe
-                                            if (!document.querySelector('.modal-backdrop')) {{
-                                                const backdrop = document.createElement('div');
-                                                backdrop.className = 'modal-backdrop in';
-                                                document.body.appendChild(backdrop);
-                                            }}
-                                            
-                                            // Intentar activar eventos
-                                            modal.dispatchEvent(new Event('shown.bs.modal', {{ bubbles: true }}));
-                                            
-                                            return true;
-                                        }} catch (e) {{
-                                            console.error("Error al forzar apertura:", e);
-                                            return false;
-                                        }}
-                                    }}
-                                """)
-                                
-                                random_sleep(2, 3)
-                                
-                                # Verificar nuevamente si se abrió
-                                modal_visible = self.page.evaluate(f"""
-                                    () => {{
-                                        const modal = document.querySelector('{self.config["modal_selector"]}');
-                                        if (!modal) return false;
-                                        
-                                        const style = window.getComputedStyle(modal);
-                                        return style.display === 'block' || style.display === 'flex';
-                                    }}
-                                """)
-                                
-                                if modal_visible:
-                                    print("  Modal abierto correctamente mediante forzado DOM")
-                                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
-                                else:
-                                    print("  No se pudo abrir el modal con ningún método")
-                            except Exception as final_error:
-                                print(f"  Error en intento final: {str(final_error)}")
-                    except Exception as check_error:
-                        print(f"  Error al verificar si el modal está visible: {str(check_error)}")
-                    
+                    self._verificar_modal()
+                    self._verificar_tabla()
+                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                    self._cambiar_pestana_modal(caratulado, tab_name)
                     self._cerrar_modal()
-                    # Solo procesar la primera lupa
+                    
+                    #break para procesar solo la primera lupa por ahora
                     break
                     
                 except Exception as e:
                     print(f"  Error procesando la lupa {idx+1}: {str(e)}")
                     self._manejar_error(e)
+                    self._cerrar_modal()
                     continue
-                    
             return True
         except Exception as e:
             self._manejar_error(e)
@@ -1169,7 +1021,8 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                         libro_td = panel.query_selector("td:has-text('Libro')")
                         if libro_td:
                             libro_text = libro_td.inner_text()
-                            match = re.search(r"/\s*(\d+)", libro_text)
+                            # Modificar la expresión regular para extraer el número después del guion de Protección
+                            match = re.search(r'Protección\s*-\s*(\d+)', libro_text)
                             if match:
                                 numero_causa = match.group(1)
                                 print(f"[INFO] Número de causa extraído: {numero_causa}")
@@ -1220,8 +1073,8 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                         pdf_form = movimiento.query_selector("form[name='frmDoc']")
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
-                            causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
-                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                            # Modificar el formato del nombre del archivo según lo solicitado
+                            pdf_filename = f"{carpeta_caratulado}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
                             preview_path = pdf_filename.replace('.pdf', '_preview.png')
                             if token:
                                 base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/apelaciones/documentos/docCausaApelaciones.php?valorDoc="
