@@ -1231,127 +1231,269 @@ class ControladorLupaCivil(ControladorLupa):
             self._manejar_error(e)
             return False
 
+    def _obtener_opciones_cuaderno(self):
+        """Obtiene todas las opciones del dropdown de cuadernos"""
+        try:
+            print("  Obteniendo opciones del dropdown de cuadernos...")
+            
+            # Esperar a que el dropdown esté visible
+            self.page.wait_for_selector('#selCuaderno', timeout=5000)
+            
+            # Obtener opciones usando JavaScript
+            opciones = self.page.evaluate("""
+                () => {
+                    const select = document.querySelector('#selCuaderno');
+                    if (!select) return [];
+                    
+                    return Array.from(select.options).map(option => ({
+                        numero: option.value,
+                        texto: option.textContent.trim(),
+                        es_seleccionado: option.selected
+                    }));
+                }
+            """)
+            
+            if not opciones:
+                print("  No se encontraron opciones en el dropdown")
+                return []
+                
+            print(f"  Se encontraron {len(opciones)} opciones en el dropdown")
+            return opciones
+            
+        except Exception as e:
+            print(f"  Error al obtener opciones del dropdown: {str(e)}")
+            return []
+
     def _procesar_contenido(self, tab_name, caratulado):
         try:
             print(f"[INFO] Procesando movimientos en Civil...")
             
-            # Intentar usar JavaScript para acceder directamente a la información
-            info_data = self.page.evaluate("""
-                () => {
-                    const resultado = {
-                        movimientos: [],
-                        numero_causa: null
-                    };
-                    
-                    // Intentar extraer el número de causa
-                    const panelInfo = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-titulos");
-                    if (panelInfo) {
-                        const libroCelda = Array.from(panelInfo.querySelectorAll('td')).find(td => td.textContent.includes('Libro'));
-                        if (libroCelda) {
-                            const libroText = libroCelda.textContent;
-                            const match = libroText.match(/\\/\\s*(\\d+)/);
-                            if (match) {
-                                resultado.numero_causa = match[1];
-                            }
-                        }
-                    }
-                    
-                    // Obtener movimientos
-                    const tabla = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-bordered");
-                    if (tabla) {
-                        const filas = tabla.querySelectorAll('tbody tr');
-                        filas.forEach(fila => {
-                            const celdas = fila.querySelectorAll('td');
-                            if (celdas.length >= 8) { // Asegurando que tiene suficientes columnas
-                                const movimiento = {
-                                    folio: celdas[0].textContent.trim(),
-                                    fecha: celdas[6].textContent.trim(), // Índice 6 para Fec. Trámite
-                                    tiene_pdf: !!fila.querySelector('form[name="form"]'),
-                                    token: fila.querySelector('form[name="form"] input[name="dtaDoc"]')?.value || null
-                                };
-                                resultado.movimientos.push(movimiento);
-                            }
-                        });
-                    }
-                    
-                    return resultado;
-                }
-            """)
-            
-            if info_data and 'numero_causa' in info_data:
-                numero_causa = info_data['numero_causa']
-                if numero_causa:
-                    print(f"[INFO] Número de causa extraído: {numero_causa}")
-                    
-                movimientos = info_data.get('movimientos', [])
-                print(f"[INFO] Se encontraron {len(movimientos)} movimientos mediante JavaScript")
-                
-                movimientos_nuevos = False
-                carpeta_general = tab_name.replace(' ', '_')
-                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                
-                # Asegurar que la carpeta existe
-                if not os.path.exists(carpeta_caratulado):
-                    os.makedirs(carpeta_caratulado)
-                
-                # Capturar la información visible del modal
-                try:
-                    panel_principal = self.page.query_selector("#modalDetalleMisCauCivil .modal-body .panel.panel-default")
-                    if panel_principal:
-                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                        panel_principal.screenshot(path=detalle_panel_path)
-                        print(f"[INFO] Captura del panel principal guardada: {detalle_panel_path}")
-                    else:
-                        print("[WARN] No se encontró el panel principal para capturar")
-                except Exception as screenshot_error:
-                    print(f"[ERROR] Error al capturar el panel principal: {str(screenshot_error)}")
-                
-                for movimiento in movimientos:
-                    try:
-                        fecha_tramite_str = movimiento.get('fecha', '')
-                        folio = movimiento.get('folio', '')
-                        
-                        if fecha_tramite_str == "07/10/2024":
-                            movimientos_nuevos = True
-                            print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
-                            
-                            if movimiento.get('tiene_pdf') and movimiento.get('token'):
-                                causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
-                                pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                preview_path = pdf_filename.replace('.pdf', '_preview.png')
-                                
-                                token = movimiento.get('token')
-                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuS.php?dtaDoc="
-                                original_url = base_url + token
-                                
-                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
-                                if pdf_descargado:
-                                    try:
-                                        # Verificar si la vista previa ya existe
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            # Convertir la primera página del PDF a imagen
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                # Guardar solo la primera página como imagen
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
-                            else:
-                                print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
-                    except Exception as e:
-                        print(f"[ERROR] Error procesando movimiento: {str(e)}")
-                        continue
-                        
-                return movimientos_nuevos
-            else:
-                print("[WARN] No se pudo extraer información mediante JavaScript")
+            # Obtener opciones del dropdown
+            opciones_cuaderno = self._obtener_opciones_cuaderno()
+            if not opciones_cuaderno:
+                print("[WARN] No se pudieron obtener las opciones del cuaderno")
                 return False
+                
+            movimientos_nuevos = False
+            carpeta_general = tab_name.replace(' ', '_')
+            carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+            
+            # Asegurar que la carpeta base existe
+            if not os.path.exists(carpeta_caratulado):
+                os.makedirs(carpeta_caratulado)
+            
+            # Procesar cada opción del dropdown
+            for opcion in opciones_cuaderno:
+                try:
+                    numero = opcion['numero']
+                    texto = opcion['texto']
+                    
+                    print(f"  Procesando cuaderno: {texto}")
+                    
+                    # Limpiar el texto para usarlo como nombre de carpeta
+                    texto_limpio = re.sub(r'[<>:"/\\|?*]', '_', texto)
+                    texto_limpio = texto_limpio[:50]  # Limitar longitud
+                    
+                    # Crear carpeta para el cuaderno con nombre limpio
+                    nombre_carpeta = f"Cuaderno_{texto_limpio}"
+                    carpeta_cuaderno = f"{carpeta_caratulado}/{nombre_carpeta}"
+                    if not os.path.exists(carpeta_cuaderno):
+                        os.makedirs(carpeta_cuaderno)
+                    
+                    # Intentar seleccionar la opción en el dropdown con retry
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            # Esperar a que el dropdown esté visible y habilitado
+                            dropdown = self.page.wait_for_selector('#selCuaderno:not([disabled])', timeout=5000)
+                            if not dropdown:
+                                raise Exception("No se encontró el dropdown")
+                            
+                            # Hacer clic en el dropdown para abrirlo
+                            dropdown.click()
+                            random_sleep(0.5, 1)
+                            
+                            # Intentar seleccionar la opción usando el texto
+                            success = self.page.evaluate(f"""
+                                () => {{
+                                    const select = document.querySelector('#selCuaderno');
+                                    if (!select) return false;
+                                    
+                                    // Buscar la opción por texto
+                                    const options = Array.from(select.options);
+                                    const targetOption = options.find(opt => opt.textContent.trim() === '{texto}');
+                                    
+                                    if (!targetOption) {{
+                                        console.log('No se encontró la opción:', '{texto}');
+                                        return false;
+                                    }}
+                                    
+                                    // Cambiar el valor
+                                    select.value = targetOption.value;
+                                    
+                                    // Verificar si el cambio fue exitoso
+                                    if (select.value !== targetOption.value) {{
+                                        console.log('El cambio de valor falló');
+                                        return false;
+                                    }}
+                                    
+                                    // Disparar el evento change
+                                    select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                    return true;
+                                }}
+                            """)
+                            
+                            if not success:
+                                raise Exception("No se pudo cambiar el valor del dropdown")
+                            
+                            # Esperar a que la tabla se actualice
+                            try:
+                                # Esperar a que la tabla tenga filas
+                                self.page.wait_for_selector("#historiaCiv table.table-bordered tbody tr", timeout=5000)
+                                
+                                # Verificar que la tabla tenga contenido
+                                rows = self.page.query_selector_all("#historiaCiv table.table-bordered tbody tr")
+                                if len(rows) > 0:
+                                    print(f"  Tabla actualizada con {len(rows)} filas")
+                                    break
+                                else:
+                                    raise Exception("La tabla está vacía")
+                            except Exception as e:
+                                if attempt == max_retries - 1:
+                                    raise e
+                                print(f"[WARN] Intento {attempt + 1} fallido al esperar la tabla: {str(e)}")
+                                random_sleep(1, 2)
+                                continue
+                                
+                        except Exception as e:
+                            if attempt == max_retries - 1:
+                                print(f"[ERROR] No se pudo seleccionar la opción después de {max_retries} intentos: {str(e)}")
+                                raise e
+                            print(f"[WARN] Intento {attempt + 1} fallido: {str(e)}")
+                            random_sleep(1, 2)
+                    
+                    # Capturar panel de detalles
+                    try:
+                        print(f"  Intentando capturar panel de detalles para cuaderno {texto}...")
+                        # Esperar a que el panel esté visible
+                        panel = self.page.wait_for_selector("#modalDetalleMisCauCivil .modal-body .panel.panel-default", timeout=5000)
+                        if panel:
+                            # Intentar hacer scroll suave
+                            self.page.evaluate("""
+                                (element) => {
+                                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                            """, panel)
+                            random_sleep(1, 2)
+                            
+                            # Intentar captura de pantalla con timeout más corto
+                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_Cuaderno_{texto_limpio}.png"
+                            try:
+                                panel.screenshot(path=detalle_panel_path, timeout=10000)
+                                print(f"[INFO] Captura del panel guardada: {detalle_panel_path}")
+                            except Exception as screenshot_error:
+                                print(f"[WARN] No se pudo tomar la captura del panel: {str(screenshot_error)}")
+                                # Intentar captura alternativa usando JavaScript
+                                try:
+                                    self.page.evaluate("""
+                                        (element) => {
+                                            const canvas = document.createElement('canvas');
+                                            const context = canvas.getContext('2d');
+                                            const rect = element.getBoundingClientRect();
+                                            
+                                            canvas.width = rect.width;
+                                            canvas.height = rect.height;
+                                            
+                                            context.drawWindow(
+                                                window,
+                                                rect.left,
+                                                rect.top,
+                                                rect.width,
+                                                rect.height,
+                                                'rgb(255,255,255)'
+                                            );
+                                            
+                                            return canvas.toDataURL();
+                                        }
+                                    """, panel)
+                                    print("[INFO] Captura alternativa del panel realizada")
+                                except Exception as js_error:
+                                    print(f"[WARN] No se pudo realizar la captura alternativa: {str(js_error)}")
+                    except Exception as panel_error:
+                        print(f"[WARN] No se pudo procesar el panel: {str(panel_error)}")
+                    
+                    # Crear carpeta Historia
+                    carpeta_historia = f"{carpeta_cuaderno}/Historia"
+                    if not os.path.exists(carpeta_historia):
+                        os.makedirs(carpeta_historia)
+                    
+                    # Obtener movimientos de la tabla
+                    movimientos = self.page.query_selector_all("#historiaCiv table.table-bordered tbody tr")
+                    print(f"[INFO] Se encontraron {len(movimientos)} movimientos en el cuaderno {texto}")
+                    
+                    # Fecha específica según el cuaderno
+                    fecha_objetivo = "07/10/2024" if "Principal" in texto else "14/03/2024"
+                    
+                    for movimiento in movimientos:
+                        try:
+                            folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
+                            fecha_tramite_str = movimiento.query_selector("td:nth-child(7)").inner_text().strip()
+                            
+                            # Manejar fechas con paréntesis
+                            if '(' in fecha_tramite_str:
+                                fecha_tramite_str = fecha_tramite_str.split('(')[0].strip()
+                            
+                            if fecha_tramite_str == fecha_objetivo:
+                                movimientos_nuevos = True
+                                print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
+                                
+                                # Buscar el formulario de PDF
+                                pdf_form = movimiento.query_selector("form[name='form']")
+                                if pdf_form:
+                                    token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
+                                    pdf_filename = f"{carpeta_historia}/Causa_{texto_limpio}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                    preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                                    
+                                    if token:
+                                        # Determinar la URL base según el tipo de documento
+                                        if "docuS.php" in pdf_form.get_attribute("action"):
+                                            base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuS.php?dtaDoc="
+                                        else:
+                                            base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuN.php?dtaDoc="
+                                            
+                                        original_url = base_url + token
+                                        
+                                        pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                        if pdf_descargado:
+                                            try:
+                                                if os.path.exists(preview_path):
+                                                    print(f"[INFO] La vista previa {preview_path} ya existe")
+                                                else:
+                                                    print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                                    images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                                    if images and len(images) > 0:
+                                                        images[0].save(preview_path, 'PNG')
+                                                        print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                                    else:
+                                                        print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            except Exception as prev_error:
+                                                print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                                else:
+                                    print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                        except Exception as e:
+                            print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                            continue
+                    
+                    # Cambiar a la pestaña Escritos por Resolver
+                    self.page.click('a[href="#escritosCiv"]')
+                    random_sleep(1, 2)
+                    
+                except Exception as e:
+                    print(f"[ERROR] Error procesando cuaderno {texto}: {str(e)}")
+                    continue
+            
+            return movimientos_nuevos
+            
         except Exception as e:
             print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
