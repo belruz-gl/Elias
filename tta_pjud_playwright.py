@@ -342,14 +342,17 @@ class ControladorLupa:
             if not lupas:
                 print("  No se encontraron lupas en la pestaña.")
                 return False
+            
             for idx, lupa_link in enumerate(lupas):
                 try:
                     fila = lupa_link.evaluate_handle('el => el.closest("tr")')
                     tds = fila.query_selector_all('td')
-                    if len(tds) < 3:
+                    if len(tds) < 4:
                         continue
-                    caratulado = tds[2].inner_text().strip().replace('/', '_')
+                    # Usar la columna 4 (índice 3) para el caratulado
+                    caratulado = tds[3].inner_text().strip().replace('/', '_')
                     print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+                    
                     lupa_link.scroll_into_view_if_needed()
                     random_sleep(0.5, 1)
                     lupa_link.click()
@@ -771,121 +774,45 @@ class ControladorLupaSuprema(ControladorLupa):
             'process_content': True
         }
 
-    def _procesar_contenido(self, tab_name, caratulado):
+    def manejar(self, tab_name):
         try:
-            print(f"[INFO] Verificando movimientos nuevos en pestaña '{tab_name}'...")
-            self.page.wait_for_selector("table.table-titulos", timeout=10000)
-            panel = self.page.query_selector("table.table-titulos")
-            numero_causa = None
-            if panel:
-                panel.scroll_into_view_if_needed()
-                random_sleep(1, 2)
+            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
+            lupas = self._obtener_lupas()
+            if not lupas:
+                print("  No se encontraron lupas en la pestaña.")
+                return False
+            
+            for idx, lupa_link in enumerate(lupas):
                 try:
-                    libro_td = panel.query_selector("td:has-text('Libro')")
-                    if libro_td:
-                        libro_text = libro_td.inner_text()
-                        match = re.search(r"/\s*(\d+)", libro_text)
-                        if match:
-                            numero_causa = match.group(1)
-                            print(f"[INFO] Número de causa extraído: {numero_causa}")
-                except Exception as e:
-                    print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
-            else:
-                print("[WARN] No se encontró el panel de información")
-            self.page.wait_for_selector("table.table-bordered", timeout=10000)
-            movimientos = self.page.query_selector_all("table.table-bordered tbody tr")
-            print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
-            movimientos_nuevos = False
-            for movimiento in movimientos:
-                try:
-                    folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
-                    fecha_tramite_str = movimiento.query_selector("td:nth-child(5)").inner_text().strip()
-                    if fecha_tramite_str == "01/12/2022":
-                        movimientos_nuevos = True
-                        carpeta_general = tab_name.replace(' ', '_')
-                        carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                        if not os.path.exists(carpeta_caratulado):
-                            print(f"[INFO] Creando carpeta: {carpeta_caratulado}")
-                            os.makedirs(carpeta_caratulado)
-                        else:
-                            print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
-                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                        if panel:
-                            # Verificar si el archivo ya existe
-                            if os.path.exists(detalle_panel_path):
-                                print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
-                            else:
-                                panel.screenshot(path=detalle_panel_path)
-                                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
-                        pdf_form = movimiento.query_selector("form[name='frmPdf']")
-                        if pdf_form:
-                            token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
-                            causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
-                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
-                            if token:
-                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
-                                original_url = base_url + token
-                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
-                                if pdf_descargado:
-                                    try:
-                                        # Verificar si la vista previa ya existe
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            # Convertir la primera página del PDF a imagen
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                # Guardar solo la primera página como imagen
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
-                        else:
-                            print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
-                except Exception as e:
-                    print(f"[ERROR] Error procesando movimiento: {str(e)}")
-                    continue
-            return movimientos_nuevos
-        except Exception as e:
-            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
-            return False
-
-    def _cambiar_pestana_modal(self, caratulado, tab_name):
-        try:
-            print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
-            self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
-            self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
-            self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
-            random_sleep(1, 2)
-            print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
-            try:
-                print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
-                self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
-                self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
-                print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
-                self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
-                random_sleep(1, 2)
-                print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
-                carpeta_general = tab_name.replace(' ', '_')
-                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
-                
-                # Crear la subcarpeta si no existe
-                if not os.path.exists(subcarpeta):
-                    os.makedirs(subcarpeta)
+                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
+                    tds = fila.query_selector_all('td')
+                    if len(tds) < 3:
+                        continue
+                    caratulado = tds[2].inner_text().strip().replace('/', '_')
+                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
                     
-                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
-                self._cerrar_ambos_modales()
-            except Exception as e:
-                print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
-                self._cerrar_ambos_modales()
+                    lupa_link.scroll_into_view_if_needed()
+                    random_sleep(0.5, 1)
+                    lupa_link.click()
+                    random_sleep(1, 2)
+                    self._verificar_modal()
+                    self._verificar_tabla()
+                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                    self._cambiar_pestana_modal(caratulado, tab_name)
+                    self._cerrar_modal()
+                    
+                    #break para procesar solo la primera lupa por ahora
+                    break
+                    
+                except Exception as e:
+                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
+                    self._manejar_error(e)
+                    self._cerrar_modal()
+                    continue
+            return True
         except Exception as e:
-            print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
-            self._cerrar_ambos_modales()
+            self._manejar_error(e)
+            return False
 
 class ControladorLupaApelacionesPrincipal(ControladorLupa):
     def obtener_config(self):
@@ -912,7 +839,7 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                     tds = fila.query_selector_all('td')
                     if len(tds) < 4:
                         continue
-                    # Cambiar de columna 2 a columna 4 para el caratulado
+                    # Usar la columna 4 (índice 3) para el caratulado
                     caratulado = tds[3].inner_text().strip().replace('/', '_')
                     print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
                     
@@ -1520,167 +1447,264 @@ class ControladorLupaCobranza(ControladorLupa):
             'lupa_selector': "#dtaTableDetalleMisCauCob a[href*='modalAnexoCausaCobranza']",
             'modal_selector': "#modalDetalleMisCauCobranza",
             'modal_title': "Detalle Causa",
-            'table_selector': ".modal-content table.table-bordered",
+            'table_selector': "#historiaCob table.table-bordered",
             'expected_headers': ['Folio', 'Doc.', 'Anexo', 'Etapa', 'Trámite', 'Desc. Trámite', 'Estado Firma', 'Fec. Trámite', 'Georeferencia'],
             'process_content': True
         }
 
-    def manejar(self, tab_name):
+    def _limpiar_nombre_carpeta(self, texto):
+        """Limpia el texto para usarlo como nombre de carpeta"""
+        # Eliminar caracteres no permitidos en nombres de archivo
+        texto_limpio = re.sub(r'[<>:"/\\|?*]', '_', texto)
+        # Eliminar tokens JWT y otros caracteres especiales
+        texto_limpio = re.sub(r'eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*', '', texto_limpio)
+        # Eliminar espacios múltiples y guiones bajos
+        texto_limpio = re.sub(r'\s+', '_', texto_limpio)
+        texto_limpio = re.sub(r'_+', '_', texto_limpio)
+        # Limitar longitud y eliminar caracteres al final
+        texto_limpio = texto_limpio[:50].strip('_')
+        return texto_limpio
+
+    def _obtener_opciones_cuaderno(self):
+        """Obtiene todas las opciones del dropdown de cuadernos de Cobranza"""
         try:
-            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
-            lupas = self._obtener_lupas()
-            if not lupas:
-                print("  No se encontraron lupas en la pestaña.")
-                return False
+            print("  Obteniendo opciones del dropdown de cuadernos de Cobranza...")
             
-            for idx, lupa_link in enumerate(lupas):
-                try:
-                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
-                    tds = fila.query_selector_all('td')
-                    if len(tds) < 4:
-                        continue
-                    # Cambiar a columna 4 (índice 3) para el caratulado
-                    caratulado = tds[3].inner_text().strip().replace('/', '_')
-                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
+            # Esperar a que el dropdown esté visible y habilitado
+            dropdown = self.page.wait_for_selector('#selCuadernoCob:not([disabled])', timeout=5000)
+            if not dropdown:
+                raise Exception("No se encontró el dropdown")
+            
+            # Obtener opciones usando JavaScript
+            opciones = self.page.evaluate("""
+                () => {
+                    const select = document.querySelector('#selCuadernoCob');
+                    if (!select) return [];
                     
-                    lupa_link.scroll_into_view_if_needed()
-                    random_sleep(0.5, 1)
-                    lupa_link.click()
-                    random_sleep(1, 2)
-                    self._verificar_modal()
-                    self._verificar_tabla()
-                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
-                    self._cambiar_pestana_modal(caratulado, tab_name)
-                    self._cerrar_modal()
-                    
-                    #break para procesar solo la primera lupa por ahora
-                    break
-                    
-                except Exception as e:
-                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
-                    self._manejar_error(e)
-                    self._cerrar_modal()
-                    continue
-            return True
+                    return Array.from(select.options).map(option => ({
+                        numero: option.value,
+                        texto: option.textContent.trim(),
+                        es_seleccionado: option.selected
+                    }));
+                }
+            """)
+            
+            if not opciones:
+                print("  No se encontraron opciones en el dropdown")
+                return []
+                
+            print(f"  Se encontraron {len(opciones)} opciones en el dropdown")
+            return opciones
+            
         except Exception as e:
-            self._manejar_error(e)
-            return False
+            print(f"  Error al obtener opciones del dropdown: {str(e)}")
+            return []
 
     def _procesar_contenido(self, tab_name, caratulado):
         try:
             print(f"[INFO] Procesando movimientos en Cobranza...")
             
-            # Esperar y capturar el panel de información
-            self.page.wait_for_selector("#modalDetalleMisCauCobranza table.table-titulos", timeout=10000)
-            panel = self.page.query_selector("#modalDetalleMisCauCobranza table.table-titulos")
-            
-            if panel:
-                carpeta_general = tab_name.replace(' ', '_')
-                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                if not os.path.exists(carpeta_caratulado):
-                    os.makedirs(carpeta_caratulado)
-                
-                detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
-                panel.screenshot(path=detalle_panel_path)
-                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
-                
-                # Extraer el número de causa del RIT
-                try:
-                    rit_td = panel.query_selector("td:has-text('RIT')")
-                    if rit_td:
-                        rit_text = rit_td.inner_text()
-                        match = re.search(r'D-(\d+)-', rit_text)
-                        if match:
-                            numero_causa = match.group(1)
-                            print(f"[INFO] Número de causa extraído: {numero_causa}")
-                except Exception as e:
-                    print(f"[WARN] No se pudo extraer el número de causa: {str(e)}")
-                    numero_causa = None
-            else:
-                print("[WARN] No se encontró el panel de información")
-                numero_causa = None
-            
-            # Intentar usar JavaScript para acceder directamente a la información
-            info_data = self.page.evaluate("""
-                () => {
-                    const resultado = {
-                        movimientos: [],
-                        numero_causa: null
-                    };
-                    
-                    // Obtener movimientos
-                    const tabla = document.querySelector("#modalDetalleMisCauCobranza .modal-body table.table-bordered");
-                    if (tabla) {
-                        const filas = tabla.querySelectorAll('tbody tr');
-                        filas.forEach(fila => {
-                            const celdas = fila.querySelectorAll('td');
-                            if (celdas.length >= 8) { // Asegurando que tiene suficientes columnas
-                                const movimiento = {
-                                    folio: celdas[0].textContent.trim(),
-                                    fecha: celdas[7].textContent.trim(), // Índice 7 para Fec. Trámite
-                                    tiene_pdf: !!fila.querySelector('form[name="frmDocH"]'),
-                                    token: fila.querySelector('form[name="frmDocH"] input[name="dtaDoc"]')?.value || null
-                                };
-                                resultado.movimientos.push(movimiento);
-                            }
-                        });
-                    }
-                    
-                    return resultado;
-                }
-            """)
-            
-            if info_data:
-                movimientos = info_data.get('movimientos', [])
-                print(f"[INFO] Se encontraron {len(movimientos)} movimientos mediante JavaScript")
-                
-                movimientos_nuevos = False
-                
-                for movimiento in movimientos:
-                    try:
-                        fecha_tramite_str = movimiento.get('fecha', '')
-                        folio = movimiento.get('folio', '')
-                        
-                        if fecha_tramite_str == "13/12/2024":
-                            movimientos_nuevos = True
-                            print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
-                            
-                            if movimiento.get('tiene_pdf') and movimiento.get('token'):
-                                pdf_filename = f"{carpeta_caratulado}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                preview_path = pdf_filename.replace('.pdf', '_preview.png')
-                                
-                                token = movimiento.get('token')
-                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/cobranza/documentos/docuCobranza.php?dtaDoc="
-                                original_url = base_url + token
-                                
-                                pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
-                                if pdf_descargado:
-                                    try:
-                                        # Verificar si la vista previa ya existe
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            # Convertir la primera página del PDF a imagen
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                # Guardar solo la primera página como imagen
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
-                            else:
-                                print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
-                    except Exception as e:
-                        print(f"[ERROR] Error procesando movimiento: {str(e)}")
-                        continue
-                        
-                return movimientos_nuevos
-            else:
-                print("[WARN] No se pudo extraer información mediante JavaScript")
+            # Obtener opciones del dropdown
+            opciones_cuaderno = self._obtener_opciones_cuaderno()
+            if not opciones_cuaderno:
+                print("[WARN] No se pudieron obtener las opciones del cuaderno")
                 return False
+                
+            movimientos_nuevos = False
+            carpeta_general = tab_name.replace(' ', '_')
+            carpeta_caratulado = f"{carpeta_general}/{self._limpiar_nombre_carpeta(caratulado)}"
+            
+            # Asegurar que la carpeta base existe
+            if not os.path.exists(carpeta_caratulado):
+                os.makedirs(carpeta_caratulado)
+            
+            # Procesar cada opción del dropdown
+            for opcion in opciones_cuaderno:
+                try:
+                    numero = opcion['numero']
+                    texto = opcion['texto']
+                    
+                    print(f"  Procesando cuaderno: {texto}")
+                    
+                    # Limpiar el texto para usarlo como nombre de carpeta
+                    texto_limpio = self._limpiar_nombre_carpeta(texto)
+                    
+                    # Crear carpeta para el cuaderno con nombre limpio
+                    nombre_carpeta = f"Cuaderno_{texto_limpio}"
+                    carpeta_cuaderno = f"{carpeta_caratulado}/{nombre_carpeta}"
+                    if not os.path.exists(carpeta_cuaderno):
+                        os.makedirs(carpeta_cuaderno)
+                    
+                    # Intentar seleccionar la opción en el dropdown con retry
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            # Esperar a que el dropdown esté visible y habilitado
+                            dropdown = self.page.wait_for_selector('#selCuadernoCob:not([disabled])', timeout=5000)
+                            if not dropdown:
+                                raise Exception("No se encontró el dropdown")
+                            
+                            # Hacer clic en el dropdown para abrirlo
+                            dropdown.click()
+                            random_sleep(0.5, 1)
+                            
+                            # Intentar seleccionar la opción usando el texto
+                            success = self.page.evaluate(f"""
+                                () => {{
+                                    const select = document.querySelector('#selCuadernoCob');
+                                    if (!select) return false;
+                                    
+                                    // Buscar la opción por texto
+                                    const options = Array.from(select.options);
+                                    const targetOption = options.find(opt => opt.textContent.trim() === '{texto}');
+                                    
+                                    if (!targetOption) {{
+                                        console.log('No se encontró la opción:', '{texto}')
+                                        return false;
+                                    }}
+                                    
+                                    // Seleccionar la opción
+                                    select.value = targetOption.value;
+                                    
+                                    // Disparar evento change
+                                    const event = new Event('change', {{ bubbles: true }});
+                                    select.dispatchEvent(event);
+                                    
+                                    return true;
+                                }}
+                            """)
+                            
+                            if not success:
+                                raise Exception(f"No se pudo seleccionar la opción: {texto}")
+                            
+                            # Esperar a que la tabla se actualice
+                            try:
+                                # Esperar a que la tabla tenga filas
+                                self.page.wait_for_selector("#historiaCob table.table-bordered tbody tr", timeout=5000)
+                                
+                                # Verificar que la tabla tenga contenido
+                                rows = self.page.query_selector_all("#historiaCob table.table-bordered tbody tr")
+                                if len(rows) > 0:
+                                    print(f"  Tabla actualizada con {len(rows)} filas")
+                                    break
+                                else:
+                                    raise Exception("La tabla está vacía")
+                            except Exception as e:
+                                if attempt == max_retries - 1:
+                                    raise e
+                                print(f"[WARN] Intento {attempt + 1} fallido al esperar la tabla: {str(e)}")
+                                random_sleep(1, 2)
+                                continue
+                                
+                        except Exception as e:
+                            if attempt == max_retries - 1:
+                                print(f"[ERROR] No se pudo seleccionar la opción después de {max_retries} intentos: {str(e)}")
+                                raise e
+                            print(f"[WARN] Intento {attempt + 1} fallido: {str(e)}")
+                            random_sleep(1, 2)
+                    
+                    # Capturar panel de detalles
+                    try:
+                        print(f"  Intentando capturar panel de detalles para cuaderno {texto}...")
+                        # Esperar a que el panel esté visible
+                        panel = self.page.wait_for_selector("#modalDetalleMisCauCobranza .modal-body .panel.panel-default", timeout=5000)
+                        numero_causa = None
+                        if panel:
+                            # Extraer el número de causa del RIT
+                            try:
+                                rit_td = panel.query_selector("td:has-text('RIT')")
+                                if rit_td:
+                                    rit_text = rit_td.inner_text()
+                                    match = re.search(r'D-(\d+)-', rit_text)
+                                    if match:
+                                        numero_causa = match.group(1)
+                                        print(f"[INFO] Número de causa extraído: {numero_causa}")
+                                    else:
+                                        print(f"[WARN] No se pudo extraer el número de causa del RIT: {rit_text}")
+                                else:
+                                    print("[WARN] No se encontró el campo RIT en el panel de detalle")
+                            except Exception as rit_error:
+                                print(f"[WARN] Error extrayendo el número de causa del RIT: {str(rit_error)}")
+                            
+                            # Intentar hacer scroll suave
+                            self.page.evaluate("""
+                                (element) => {
+                                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                }
+                            """, panel)
+                            random_sleep(1, 2)
+                            
+                            # Guardar captura del panel
+                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_Cobranza_Cuaderno_{texto_limpio}.png"
+                            panel.screenshot(path=detalle_panel_path)
+                            print(f"[INFO] Captura del panel guardada: {detalle_panel_path}")
+                        else:
+                            print("[WARN] No se encontró el panel de información")
+                    except Exception as panel_error:
+                        print(f"[WARN] No se pudo procesar el panel: {str(panel_error)}")
+                    
+                    # Crear carpeta Historia
+                    carpeta_historia = f"{carpeta_cuaderno}/Historia"
+                    if not os.path.exists(carpeta_historia):
+                        os.makedirs(carpeta_historia)
+                    
+                    # Obtener movimientos de la tabla
+                    movimientos = self.page.query_selector_all("#historiaCob table.table-bordered tbody tr")
+                    print(f"[INFO] Se encontraron {len(movimientos)} movimientos en el cuaderno {texto}")
+                    
+                    # Fecha específica según el cuaderno
+                    fecha_objetivo = "13/12/2024"
+                    
+                    for movimiento in movimientos:
+                        try:
+                            folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
+                            fecha_tramite_str = movimiento.query_selector("td:nth-child(8)").inner_text().strip()  # Fec. Trámite
+                            # Manejar fechas con paréntesis
+                            if '(' in fecha_tramite_str:
+                                fecha_tramite_str = fecha_tramite_str.split('(')[0].strip()
+                            if fecha_tramite_str == fecha_objetivo:
+                                movimientos_nuevos = True
+                                print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
+                                # Buscar el formulario de PDF
+                                pdf_form = movimiento.query_selector("form[name='frmDocH']")
+                                if pdf_form:
+                                    token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
+                                    if numero_causa:
+                                        pdf_filename = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                        preview_path = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                    else:
+                                        pdf_filename = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                        preview_path = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                    if token:
+                                        base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/cobranza/documentos/docuCobranza.php?dtaDoc="
+                                        original_url = base_url + token
+                                        pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                        if pdf_descargado:
+                                            try:
+                                                if os.path.exists(preview_path):
+                                                    print(f"[INFO] La vista previa {preview_path} ya existe")
+                                                else:
+                                                    print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                                    images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                                    if images and len(images) > 0:
+                                                        images[0].save(preview_path, 'PNG')
+                                                        print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                                    else:
+                                                        print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                            except Exception as prev_error:
+                                                print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                                else:
+                                    print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                        except Exception as e:
+                            print(f"[ERROR] Error procesando movimiento: {str(e)}")
+                            continue
+                    
+                except Exception as e:
+                    print(f"[ERROR] Error procesando cuaderno {texto}: {str(e)}")
+                    continue
+            
+            return movimientos_nuevos
+            
         except Exception as e:
             print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
