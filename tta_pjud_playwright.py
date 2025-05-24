@@ -1377,7 +1377,23 @@ class ControladorLupaCivil(ControladorLupa):
                         print(f"  Intentando capturar panel de detalles para cuaderno {texto}...")
                         # Esperar a que el panel esté visible
                         panel = self.page.wait_for_selector("#modalDetalleMisCauCivil .modal-body .panel.panel-default", timeout=5000)
+                        numero_causa = None
                         if panel:
+                            # Extraer el número de causa del ROL
+                            try:
+                                rol_td = panel.query_selector("td:has-text('ROL:')")
+                                if rol_td:
+                                    rol_text = rol_td.inner_text()
+                                    match = re.search(r"C-(\\d+)-", rol_text)
+                                    if match:
+                                        numero_causa = match.group(1)
+                                        print(f"[INFO] Número de causa extraído: {numero_causa}")
+                                    else:
+                                        print(f"[WARN] No se pudo extraer el número de causa del ROL: {rol_text}")
+                                else:
+                                    print("[WARN] No se encontró el campo ROL en el panel de detalle")
+                            except Exception as rol_error:
+                                print(f"[WARN] Error extrayendo el número de causa del ROL: {str(rol_error)}")
                             # Intentar hacer scroll suave
                             self.page.evaluate("""
                                 (element) => {
@@ -1385,7 +1401,6 @@ class ControladorLupaCivil(ControladorLupa):
                                 }
                             """, panel)
                             random_sleep(1, 2)
-                            
                             # Intentar captura de pantalla con timeout más corto
                             detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_Cuaderno_{texto_limpio}.png"
                             try:
@@ -1400,10 +1415,8 @@ class ControladorLupaCivil(ControladorLupa):
                                             const canvas = document.createElement('canvas');
                                             const context = canvas.getContext('2d');
                                             const rect = element.getBoundingClientRect();
-                                            
                                             canvas.width = rect.width;
                                             canvas.height = rect.height;
-                                            
                                             context.drawWindow(
                                                 window,
                                                 rect.left,
@@ -1412,13 +1425,14 @@ class ControladorLupaCivil(ControladorLupa):
                                                 rect.height,
                                                 'rgb(255,255,255)'
                                             );
-                                            
                                             return canvas.toDataURL();
                                         }
                                     """, panel)
                                     print("[INFO] Captura alternativa del panel realizada")
                                 except Exception as js_error:
                                     print(f"[WARN] No se pudo realizar la captura alternativa: {str(js_error)}")
+                        else:
+                            print(f"[WARN] No se pudo procesar el panel: {str(panel_error)}")
                     except Exception as panel_error:
                         print(f"[WARN] No se pudo procesar el panel: {str(panel_error)}")
                     
@@ -1438,31 +1452,29 @@ class ControladorLupaCivil(ControladorLupa):
                         try:
                             folio = movimiento.query_selector("td:nth-child(1)").inner_text().strip()
                             fecha_tramite_str = movimiento.query_selector("td:nth-child(7)").inner_text().strip()
-                            
                             # Manejar fechas con paréntesis
                             if '(' in fecha_tramite_str:
                                 fecha_tramite_str = fecha_tramite_str.split('(')[0].strip()
-                            
                             if fecha_tramite_str == fecha_objetivo:
                                 movimientos_nuevos = True
                                 print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
-                                
                                 # Buscar el formulario de PDF
                                 pdf_form = movimiento.query_selector("form[name='form']")
                                 if pdf_form:
                                     token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
-                                    pdf_filename = f"{carpeta_historia}/Causa_{texto_limpio}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                    preview_path = pdf_filename.replace('.pdf', '_preview.png')
-                                    
+                                    if numero_causa:
+                                        pdf_filename = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                        preview_path = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                    else:
+                                        pdf_filename = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                                        preview_path = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
                                     if token:
                                         # Determinar la URL base según el tipo de documento
                                         if "docuS.php" in pdf_form.get_attribute("action"):
                                             base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuS.php?dtaDoc="
                                         else:
                                             base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/civil/documentos/docuN.php?dtaDoc="
-                                            
                                         original_url = base_url + token
-                                        
                                         pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                         if pdf_descargado:
                                             try:
