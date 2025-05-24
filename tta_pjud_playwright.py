@@ -1384,7 +1384,7 @@ class ControladorLupaCivil(ControladorLupa):
                                 rol_td = panel.query_selector("td:has-text('ROL:')")
                                 if rol_td:
                                     rol_text = rol_td.inner_text()
-                                    match = re.search(r"C-(\\d+)-", rol_text)
+                                    match = re.search(r"ROL:\s*C-(\d+)-", rol_text)
                                     if match:
                                         numero_causa = match.group(1)
                                         print(f"[INFO] Número de causa extraído: {numero_causa}")
