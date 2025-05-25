@@ -821,7 +821,7 @@ class ControladorLupaSuprema(ControladorLupa):
                     random_sleep(1, 2)
                     self._verificar_modal()
                     self._verificar_tabla()
-                    movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
+                    movimientos_nuevos = self._procesar_contenido_suprema(tab_name, caratulado)
                     self._cambiar_pestana_modal(caratulado, tab_name)
                     self._cerrar_modal()
                     
@@ -837,6 +837,130 @@ class ControladorLupaSuprema(ControladorLupa):
         except Exception as e:
             self._manejar_error(e)
             return False
+
+    def _procesar_contenido_suprema(self, tab_name, caratulado):
+        try:
+            print(f"[INFO] Verificando movimientos nuevos en pestaña '{tab_name}'...")
+            self.page.wait_for_selector("table.table-titulos", timeout=10000)
+            panel = self.page.query_selector("table.table-titulos")
+            numero_causa = None
+            if panel:
+                panel.scroll_into_view_if_needed()
+                random_sleep(1, 2)
+                try:
+                    libro_td = panel.query_selector("td:has-text('Libro')")
+                    if libro_td:
+                        libro_text = libro_td.inner_text()
+                        match = re.search(r"/\s*(\d+)", libro_text)
+                        if match:
+                            numero_causa = match.group(1)
+                            print(f"[INFO] Número de causa extraído: {numero_causa}")
+                except Exception as e:
+                    print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
+            else:
+                print("[WARN] No se encontró el panel de información")
+            self.page.wait_for_selector("table.table-bordered", timeout=10000)
+            movimientos = self.page.query_selector_all("table.table-bordered tbody tr")
+            print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
+            movimientos_nuevos = False
+            for movimiento in movimientos:
+                try:
+                    tds = movimiento.query_selector_all('td')
+                    if len(tds) < 5:
+                        continue
+                    folio_text = tds[0].inner_text().strip()
+                    if not folio_text.isdigit():
+                        continue
+                    folio = folio_text
+                    fecha_tramite_str = tds[4].inner_text().strip()
+                    if fecha_tramite_str == "01/12/2022":
+                        movimientos_nuevos = True
+                        carpeta_general = tab_name.replace(' ', '_')
+                        carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                        if not os.path.exists(carpeta_caratulado):
+                            print(f"[INFO] Creando carpeta: {carpeta_caratulado}")
+                            os.makedirs(carpeta_caratulado)
+                        else:
+                            print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        if panel:
+                            # Verificar si el archivo ya existe
+                            if os.path.exists(detalle_panel_path):
+                                print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
+                            else:
+                                try:
+                                    panel.screenshot(path=detalle_panel_path)
+                                    print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                                except Exception as e:
+                                    print(f"[WARN] No se pudo tomar la captura del panel: {str(e)}")
+                        pdf_form = movimiento.query_selector("form[name='frmPdf']")
+                        if pdf_form:
+                            token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
+                            causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
+                            pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
+                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            if token:
+                                base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
+                                original_url = base_url + token
+                                try:
+                                    pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                except Exception as e:
+                                    print(f"[ERROR] Error descargando PDF para folio {folio}, causa {numero_causa}: {e}")
+                                    pdf_descargado = False
+                                if pdf_descargado:
+                                    try:
+                                        if os.path.exists(preview_path):
+                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
+                                        else:
+                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
+                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
+                                            if images and len(images) > 0:
+                                                images[0].save(preview_path, 'PNG')
+                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
+                                            else:
+                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
+                                    except Exception as prev_error:
+                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                        else:
+                            print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                except Exception as e:
+                    print(f"[ERROR] Error procesando movimiento {folio if 'folio' in locals() else ''}: {str(e)}")
+                    continue
+            # Restaurar el flujo original: cambiar siempre al tab interno 'Expediente Corte Apelaciones' y procesar la lupa/tab correspondiente
+            try:
+                print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
+                self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
+                self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
+                self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
+                random_sleep(1, 2)
+                print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
+                # Procesar la lupa/tab de Expediente Corte Apelaciones dentro del modal
+                try:
+                    print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
+                    self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
+                    self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
+                    print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
+                    self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
+                    random_sleep(1, 2)
+                    print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
+                    carpeta_general = tab_name.replace(' ', '_')
+                    carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                    subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
+                    if not os.path.exists(subcarpeta):
+                        os.makedirs(subcarpeta)
+                    self._verificar_movimientos_apelaciones(subcarpeta)
+                except Exception as e:
+                    print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
+            except Exception as e:
+                print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
+            return movimientos_nuevos
+        except Exception as e:
+            print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
+            return False
+
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        # La pestaña de Apelaciones no tiene subpestañas, por lo que no hacemos nada
+        pass
 
 class ControladorLupaApelacionesPrincipal(ControladorLupa):
     def obtener_config(self):
@@ -2227,7 +2351,7 @@ def extraer_metadata_pdf(pdf_path):
         return None
 
 def construir_cuerpo_html(archivos_adjuntos):
-    """Construye el cuerpo del correo en formato HTML"""
+    """Construye el cuerpo del correo en formato HTML con la tabla solicitada."""
     try:
         html = """
         <html>
@@ -2245,31 +2369,43 @@ def construir_cuerpo_html(archivos_adjuntos):
             <table>
                 <tr>
                     <th>Documento</th>
-                    <th>Materia</th>
+                    <th>Sección</th>
+                    <th>Caratulado</th>
+                    <th>N° Causa</th>
                     <th>Fecha</th>
-                    <th>Páginas</th>
                 </tr>
         """
-        
+        import os
+        import re
         for archivo in archivos_adjuntos:
-            metadata = extraer_metadata_pdf(archivo)
-            if metadata:
-                html += f"""
+            # Extraer partes de la ruta
+            partes = os.path.normpath(archivo).split(os.sep)
+            documento = os.path.basename(archivo)
+            seccion = partes[0] if len(partes) > 1 else ''
+            caratulado = partes[1] if len(partes) > 2 else ''
+            # N° Causa: buscar 'Causa_XXXX_' en el nombre del archivo
+            match_causa = re.search(r'Causa_(\d+)_', documento)
+            n_causa = match_causa.group(1) if match_causa else ''
+            # Fecha: buscar 'fecha_dd_mm_yyyy' en el nombre del archivo
+            match_fecha = re.search(r'fecha_(\d{2})_(\d{2})_(\d{4})', documento)
+            if match_fecha:
+                fecha = f"{match_fecha.group(1)}/{match_fecha.group(2)}/{match_fecha.group(3)}"
+            else:
+                fecha = ''
+            html += f"""
                 <tr>
-                    <td>{metadata['titulo']}</td>
-                    <td>{metadata['materia']}</td>
-                    <td>{metadata['fecha']}</td>
-                    <td>{metadata['num_paginas']}</td>
+                    <td>{documento}</td>
+                    <td>{seccion}</td>
+                    <td>{caratulado}</td>
+                    <td>{n_causa}</td>
+                    <td>{fecha}</td>
                 </tr>
-                """
-        
+            """
         html += """
             </table>
-            <p>Este es un correo automático generado por el sistema de monitoreo.</p>
         </body>
         </html>
         """
-        
         return html
     except Exception as e:
         logging.error(f"Error construyendo cuerpo HTML: {str(e)}")
