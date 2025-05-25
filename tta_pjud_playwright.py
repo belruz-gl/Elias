@@ -4,6 +4,30 @@ import time, random, os
 from datetime import datetime, timedelta
 from pdf2image import convert_from_path
 import re
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
+import logging
+from PyPDF2 import PdfReader
+import traceback
+
+# Configuración del logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('email_sender.log'),
+        logging.StreamHandler()
+    ]
+)
+
+# Variables globales para correo
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_RECIPIENTS = os.getenv("EMAIL_RECIPIENTS", "").split(",")
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
 
 # Variables globales
 BASE_URL_PJUD = "https://oficinajudicialvirtual.pjud.cl/home/"
@@ -2014,6 +2038,10 @@ def automatizar_poder_judicial(page, username, password):
     try:
         print("\n=== INICIANDO AUTOMATIZACIÓN DEL PODER JUDICIAL ===\n")
         
+        # Lista para almacenar los archivos nuevos descargados
+        archivos_nuevos = []
+        error_seleccion = False
+        
         # Abrir la página principal
         print("Accediendo a la página principal de PJUD...")
         page.goto(BASE_URL_PJUD)
@@ -2040,23 +2068,51 @@ def automatizar_poder_judicial(page, username, password):
             
             if mis_causas_success:
                 # Navegar por las pestañas de Mis Causas
-                navigate_mis_causas_tabs(page)        
+                navigate_mis_causas_tabs(page)
+                
+                try:
+                    # Buscar archivos nuevos en las carpetas
+                    for carpeta in MIS_CAUSAS_TABS:
+                        carpeta_path = carpeta.replace(' ', '_')
+                        if os.path.exists(carpeta_path):
+                            for root, dirs, files in os.walk(carpeta_path):
+                                for file in files:
+                                    if file.endswith('.pdf'):
+                                        archivo_completo = os.path.join(root, file)
+                                        # Verificar si el archivo es nuevo (menos de 24 horas)
+                                        if os.path.getmtime(archivo_completo) > (time.time() - 86400):
+                                            archivos_nuevos.append(archivo_completo)
+                except Exception as e:
+                    print(f"Error al seleccionar archivos: {str(e)}")
+                    error_seleccion = True
             
             # 2. Navegar a Mi Estado Diario
-           # estado_diario_success = navigate_to_estado_diario(page)
+            # estado_diario_success = navigate_to_estado_diario(page)
             
             #if estado_diario_success:
                 # Navegar por las pestañas de Mi Estado Diario
              #   navigate_estado_diario_tabs(page)
             
             print("\n=== AUTOMATIZACIÓN DEL PODER JUDICIAL COMPLETADA ===\n")
+            
+            # Enviar correo según el caso
+            if error_seleccion:
+                enviar_correo(asunto="Error al seleccionar archivos PJUD")
+            elif archivos_nuevos:
+                asunto = f"Nuevos documentos PJUD - {datetime.now().strftime('%d/%m/%Y')}"
+                enviar_correo(archivos_nuevos, asunto)
+            else:
+                enviar_correo(asunto="No hay nuevos documentos PJUD")
+            
             return True
         else:
             print("No se pudo completar el proceso de login")
+            enviar_correo(asunto="Error en automatización PJUD - Login fallido")
             return False
             
     except Exception as e:
         print(f"Error en la automatización del Poder Judicial: {str(e)}")
+        enviar_correo(asunto="Error en automatización PJUD")
         return False
 
 def automatizar_tta(page, username, password):
@@ -2118,6 +2174,163 @@ def automatizar_tta(page, username, password):
    
         return False
 
+def extraer_metadata_pdf(pdf_path):
+    """Extrae metadata de un archivo PDF"""
+    try:
+        metadata = {
+            'num_paginas': 0,
+            'materia': '',
+            'fecha': '',
+            'titulo': '',
+            'autor': ''
+        }
+        
+        with open(pdf_path, 'rb') as file:
+            pdf = PdfReader(file)
+            metadata['num_paginas'] = len(pdf.pages)
+            
+            # Extraer texto de la primera página para análisis
+            if len(pdf.pages) > 0:
+                texto = pdf.pages[0].extract_text()
+                
+                # Buscar materia usando patrones comunes
+                materia_patterns = [
+                    r'Materia:\s*([^\n]+)',
+                    r'Asunto:\s*([^\n]+)',
+                    r'Causa:\s*([^\n]+)'
+                ]
+                for pattern in materia_patterns:
+                    match = re.search(pattern, texto)
+                    if match:
+                        metadata['materia'] = match.group(1).strip()
+                        break
+                
+                # Buscar fecha usando patrones comunes
+                fecha_patterns = [
+                    r'Fecha:\s*(\d{2}/\d{2}/\d{4})',
+                    r'(\d{2}/\d{2}/\d{4})',
+                    r'(\d{2}-\d{2}-\d{4})'
+                ]
+                for pattern in fecha_patterns:
+                    match = re.search(pattern, texto)
+                    if match:
+                        metadata['fecha'] = match.group(1).strip()
+                        break
+                
+                # Extraer título del nombre del archivo
+                nombre_archivo = os.path.basename(pdf_path)
+                metadata['titulo'] = os.path.splitext(nombre_archivo)[0]
+        
+        return metadata
+    except Exception as e:
+        logging.error(f"Error extrayendo metadata del PDF {pdf_path}: {str(e)}")
+        return None
+
+def construir_cuerpo_html(archivos_adjuntos):
+    """Construye el cuerpo del correo en formato HTML"""
+    try:
+        html = """
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; }
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
+            </style>
+        </head>
+        <body>
+            <h2>Resumen de Documentos Adjuntos</h2>
+            <table>
+                <tr>
+                    <th>Documento</th>
+                    <th>Materia</th>
+                    <th>Fecha</th>
+                    <th>Páginas</th>
+                </tr>
+        """
+        
+        for archivo in archivos_adjuntos:
+            metadata = extraer_metadata_pdf(archivo)
+            if metadata:
+                html += f"""
+                <tr>
+                    <td>{metadata['titulo']}</td>
+                    <td>{metadata['materia']}</td>
+                    <td>{metadata['fecha']}</td>
+                    <td>{metadata['num_paginas']}</td>
+                </tr>
+                """
+        
+        html += """
+            </table>
+            <p>Este es un correo automático generado por el sistema de monitoreo.</p>
+        </body>
+        </html>
+        """
+        
+        return html
+    except Exception as e:
+        logging.error(f"Error construyendo cuerpo HTML: {str(e)}")
+        return None
+
+def enviar_correo(archivos_adjuntos=None, asunto="Notificación de Sistema"):
+    """Envía un correo electrónico con archivos adjuntos"""
+    try:
+        # Verificar credenciales
+        if not all([EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECIPIENTS]):
+            logging.error("Faltan credenciales de correo electrónico")
+            return False
+        
+        # Crear mensaje
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = ", ".join(EMAIL_RECIPIENTS)
+        msg['Subject'] = asunto
+        
+        # Si no hay archivos adjuntos, enviar mensaje simple
+        if not archivos_adjuntos:
+            cuerpo = "No se encontraron nuevos documentos para adjuntar."
+            msg.attach(MIMEText(cuerpo, 'plain'))
+        else:
+            # Construir cuerpo HTML con metadata
+            html_cuerpo = construir_cuerpo_html(archivos_adjuntos)
+            if html_cuerpo:
+                msg.attach(MIMEText(html_cuerpo, 'html'))
+            
+            # Adjuntar archivos
+            for archivo in archivos_adjuntos:
+                try:
+                    with open(archivo, 'rb') as f:
+                        part = MIMEApplication(f.read(), Name=os.path.basename(archivo))
+                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(archivo)}"'
+                        msg.attach(part)
+                except Exception as e:
+                    logging.error(f"Error adjuntando archivo {archivo}: {str(e)}")
+        
+        # Enviar correo con reintentos
+        max_intentos = 3
+        for intento in range(max_intentos):
+            try:
+                with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+                    server.starttls()
+                    server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                    server.send_message(msg)
+                logging.info("Correo enviado exitosamente")
+                return True
+            except Exception as e:
+                if intento < max_intentos - 1:
+                    logging.warning(f"Intento {intento + 1} fallido. Reintentando...")
+                    time.sleep(5)  # Esperar 5 segundos entre intentos
+                else:
+                    logging.error(f"Error enviando correo después de {max_intentos} intentos: {str(e)}")
+                    return False
+        
+    except Exception as e:
+        logging.error(f"Error general en envío de correo: {str(e)}")
+        return False
+
 def main():
     # Carga el archivo .env
     load_dotenv()
@@ -2132,6 +2345,18 @@ def main():
     else:
         print("Faltan claves en el archivo .env.")
         return
+        
+    # Verifica las credenciales de correo
+    if not all([EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECIPIENTS]):
+        print("ADVERTENCIA: Faltan credenciales de correo electrónico en el archivo .env")
+        print("Se requiere configurar:")
+        if not EMAIL_SENDER:
+            print("- EMAIL_SENDER: Correo del remitente")
+        if not EMAIL_PASSWORD:
+            print("- EMAIL_PASSWORD: Contraseña del correo")
+        if not EMAIL_RECIPIENTS:
+            print("- EMAIL_RECIPIENTS: Lista de correos destinatarios separados por coma")
+        print("\nEl script continuará pero no se enviarán correos electrónicos.")
 
     playwright = None
     browser = None
@@ -2147,7 +2372,8 @@ def main():
         
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
-
+        if all([EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECIPIENTS]):
+            enviar_correo(asunto="Error crítico en automatización")
 
     finally:
         if browser:
