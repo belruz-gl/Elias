@@ -34,7 +34,6 @@ BASE_URL_PJUD = "https://oficinajudicialvirtual.pjud.cl/home/"
 
 # Listas y diccionarios para la navegación en PJUD
 MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia", "Disciplinario"]
-MI_ESTADO_DIARIO_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia"]
 
 # Diccionario de funciones JavaScript por pestaña
 TAB_FUNCTIONS = {
@@ -2059,102 +2058,6 @@ def navigate_mis_causas_tabs(page):
     
     print("--- Finalizada navegación por pestañas de Mis Causas ---\n")
 
-def navigate_to_estado_diario(page):
-    """Navega a la sección Mi Estado Diario"""
-    try:
-        print("Navegando a 'Mi Estado Diario'...")
-        
-        # Intentar hacer clic mediante JavaScript
-        try:
-            page.evaluate("miEstadoDiario();")
-            print("Navegación a 'Mi Estado Diario' mediante JS exitosa!")
-        except Exception as js_error:
-            print(f"Error al ejecutar JavaScript: {str(js_error)}")
-            
-            # Intento alternativo haciendo clic directamente en el elemento
-            try:
-                page.click("a:has-text('Mi Estado Diario')")
-                print("Navegación a 'Mi Estado Diario' mediante clic directo exitosa!")
-            except Exception as click_error:
-                print(f"Error al hacer clic directo: {str(click_error)}")
-                return False
-        
-        # Dar tiempo para que cargue la página
-        random_sleep(2, 4)
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error al navegar a 'Mi Estado Diario': {str(e)}")
- 
-        return False
-
-def navigate_estado_diario_tabs(page):
-    """Navega por todas las pestañas en la sección Mi Estado Diario"""
-    print("\n--- Navegando por pestañas de Mi Estado Diario ---")
-    
-    # Llevar un registro de las pestañas ya visitadas
-    visited_tabs = set()
-    
-    # Variable para controlar si ya se ha manejado el error de DataTable en Civil
-    civil_error_handled = False
-    
-    for tab_name in MI_ESTADO_DIARIO_TABS:
-        try:
-            print(f"  Navegando a pestaña '{tab_name}'...")
-            
-            # si ya se visitó la pagina se evita hacerlo de nuevo
-            if tab_name in visited_tabs:
-                print(f"  Pestaña '{tab_name}' ya fue visitada. Continuando...")
-                continue
-                
-            # Intentar encontrar y hacer clic en la pestaña
-            try:
-                # Primero intentar con el texto exacto
-                page.click(f"a:has-text('{tab_name}')")
-            except:
-                try:
-                    # Si falla, intentar con una coincidencia más flexible
-                    page.click(f"a:has-text('{tab_name}', 'i')")
-                except:
-                    print(f"  No se pudo encontrar la pestaña '{tab_name}'. Continuando...")
-                    continue
-            
-            print(f"  Clic exitoso en pestaña '{tab_name}'")
-            
-            # Registrar que hemos visitado esta pestaña
-            visited_tabs.add(tab_name)
-            
-            # Manejo especial para Civil por error de DataTable
-            if tab_name == "Civil" and not civil_error_handled:
-                random_sleep(3, 5)
-                civil_error_handled = True
-                continue
-            
-            # Para otras pestañas, ejecutar la función de búsqueda si está definida
-            if tab_name in TAB_FUNCTIONS:
-                js_function = TAB_FUNCTIONS[tab_name]
-                try:
-                    # Usar la función buscar directamente como se muestra en el HTML de la pagina
-                    page.evaluate(f"buscar('{js_function}');")
-                    print(f"  Ejecutada función de búsqueda '{js_function}'")
-                except Exception as js_error:
-                    print(f"  Error al ejecutar función de búsqueda: {str(js_error)}")
-                    # Intento alternativo: buscar el botón específico y hacer clic
-                    try:
-                        page.click(f"button[onclick*='{js_function}'], button#buscar")
-                        print(f"  Clic exitoso en botón de búsqueda alternativo")
-                    except:
-                        print(f"  No se pudo encontrar botón de búsqueda alternativo")
-            
-            # Esperar un momento para que cargue la pestaña
-            random_sleep(2, 4)
-            
-        except Exception as e:
-            print(f"  Error navegando a pestaña '{tab_name}': {str(e)}")
-  
-    
-    print("--- Finalizada navegación por pestañas de Mi Estado Diario ---\n")
 
 def automatizar_poder_judicial(page, username, password):
     """Función principal para automatizar PJUD"""
@@ -2209,12 +2112,6 @@ def automatizar_poder_judicial(page, username, password):
                     print(f"Error al seleccionar archivos: {str(e)}")
                     error_seleccion = True
             
-            # 2. Navegar a Mi Estado Diario
-            # estado_diario_success = navigate_to_estado_diario(page)
-            
-            #if estado_diario_success:
-                # Navegar por las pestañas de Mi Estado Diario
-             #   navigate_estado_diario_tabs(page)
             
             print("\n=== AUTOMATIZACIÓN DEL PODER JUDICIAL COMPLETADA ===\n")
             
