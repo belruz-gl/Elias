@@ -31,7 +31,6 @@ SMTP_PORT = 587
 
 # Variables globales
 BASE_URL_PJUD = "https://oficinajudicialvirtual.pjud.cl/home/"
-BASE_URL_TTA = "https://www.tta.cl/"
 
 # Listas y diccionarios para la navegación en PJUD
 MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia", "Disciplinario"]
@@ -2239,64 +2238,6 @@ def automatizar_poder_judicial(page, username, password):
         enviar_correo(asunto="Error en automatización PJUD")
         return False
 
-def automatizar_tta(page, username, password):
-    """Función principal para automatizar TTA"""
-    try:
-        print("\n=== INICIANDO AUTOMATIZACIÓN DE TTA ===\n")
-        
-        # Abrir la página principal de TTA
-        print("Accediendo a la página principal de TTA...")
-        page.goto(BASE_URL_TTA)
-        random_sleep(3, 5)
-        
-        # Esperar y hacer clic en "oficina judicial virtual tta"
-        print("Buscando botón 'oficina judicial virtual tta'...")
-        page.click("a[href*='ojv.tta.cl']")
-        random_sleep(3, 5)
-        
-        # Cambiar a la nueva pestaña abierta
-        all_pages = page.context.pages
-        new_page = all_pages[-1]  # La última página abierta
-        page = new_page  # Cambiamos el contexto a la nueva página
-        print(f"Navegando en la nueva pestaña: {page.url}")
-
-        # Clickear en opcion clave unica para iniciar sesion
-        print("Buscando y haciendo clic en 'Clave Única'...")
-        try:
-            page.click("a[href*='AccesoClaveUnica'] span.icon-clave-unica", timeout=8000)
-            print("Botón 'Clave Única' encontrado y clicado mediante selector específico")
-        except:
-            try:
-                page.click("a:has-text('Clave Única')", timeout=8000)
-                print("Botón 'Clave Única' encontrado y clicado mediante texto")
-            except Exception as e:
-                print(f"Error al hacer clic en 'Clave Única': {str(e)}")
-                return False
-            
-        random_sleep(2, 4)
-        
-        # 1. Login
-        login_success = login(page, username, password)
-        if login_success:
-            print("Login completado con éxito")
-            
-            # Dar un tiempo para que la página principal se cargue 
-            random_sleep(2, 4)
-            
-            # Aquí irá la navegación por secciones y extracción de datos
-            # TODO: Implementar la navegación específica de TTA
-            
-            print("\n=== AUTOMATIZACIÓN DE TTA COMPLETADA ===\n")
-            return True 
-
-        else:
-            print("No se pudo completar el proceso de login")
-            return False  
-   
-    except Exception as e:
-        print(f"Error en la automatización de TTA: {str(e)}")
-   
-        return False
 
 def extraer_metadata_pdf(pdf_path):
     """Extrae metadata de un archivo PDF"""
@@ -2503,8 +2444,6 @@ def main():
         # Ejecutar la automatización de PJUD
         automatizar_poder_judicial(page, USERNAME, PASSWORD)
         
-        # Ejecutar la automatización de TTA
-        #automatizar_tta(page, USERNAME, PASSWORD)
         
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
