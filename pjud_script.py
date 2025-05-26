@@ -2,7 +2,6 @@ from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 import time, random, os
 from datetime import datetime, timedelta
-from pdf2image import convert_from_path
 import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -359,7 +358,7 @@ def verificar_movimientos_nuevos(page, tab_name):
                         token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
                         causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
                         pdf_filename = f"{pdf_dir}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                        preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                     
                         original_url = None
                         if token:
                             base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
@@ -368,20 +367,7 @@ def verificar_movimientos_nuevos(page, tab_name):
                             print(f"[INFO] Descargando PDF usando la URL extraída del HTML...")
                             pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, page)
                             
-                            # Generar una vista previa del PDF (primera página como imagen)
-                            if pdf_descargado:
-                                try:
-                                    print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                    # Convertir la primera página del PDF a imagen
-                                    images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                    if images and len(images) > 0:
-                                        # Guardar solo la primera página como imagen
-                                        images[0].save(preview_path, 'PNG')
-                                        print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                    else:
-                                        print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                except Exception as prev_error:
-                                    print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+
                         
                     else:
                         print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
@@ -573,29 +559,14 @@ class ControladorLupa:
                             token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
                             causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
                             pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            
                             if token:
                                 base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
                                 original_url = base_url + token
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     pdf_path = pdf_filename
-                                    try:
-                                        # Verificar si la vista previa ya existe
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            # Convertir la primera página del PDF a imagen
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                # Guardar solo la primera página como imagen
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                         
@@ -861,7 +832,7 @@ class ControladorLupa:
                             token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
                             causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
                             pdf_filename = f"{subcarpeta}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            
                             
                             # Construir la URL para descargar el PDF
                             if token:
@@ -875,20 +846,8 @@ class ControladorLupa:
                                 
                                 if pdf_descargado:
                                     archivos_apelaciones.append(pdf_filename)
-                                    # Generar una vista previa del PDF (primera página como imagen)
-                                    try:
-                                        print(f"  Generando vista previa del PDF para {pdf_filename}...")
-                                        # Convertir la primera página del PDF a imagen
-                                        images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                        if images and len(images) > 0:
-                                            # Guardar solo la primera página como imagen
-                                            images[0].save(preview_path, 'PNG')
-                                            archivos_apelaciones.append(preview_path)
-                                            print(f"  Vista previa guardada en: {preview_path}")
-                                        else:
-                                            print(f"  No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"  Error al generar la vista previa del PDF: {str(prev_error)}")
+
+
                         else:
                             print(f"  No hay PDF disponible para el movimiento {folio}")
                 except Exception as e:
@@ -1110,7 +1069,7 @@ class ControladorLupaSuprema(ControladorLupa):
                             token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
                             causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
                             pdf_filename = f"{carpeta_caratulado}/{causa_str}folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                         
                             if token:
                                 base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/suprema/documentos/docCausaSuprema.php?valorFile="
                                 original_url = base_url + token
@@ -1121,20 +1080,7 @@ class ControladorLupaSuprema(ControladorLupa):
                                 except Exception as e:
                                     print(f"[ERROR] Error descargando PDF para folio {folio}, causa {numero_causa}: {e}")
                                     pdf_descargado = False
-                                if pdf_descargado:
-                                    try:
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+ 
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                         
@@ -1341,29 +1287,14 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                             token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
                             # Modificar el formato del nombre del archivo según lo solicitado
                             pdf_filename = f"{carpeta_caratulado}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                            preview_path = pdf_filename.replace('.pdf', '_preview.png')
+                            
                             if token:
                                 base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/apelaciones/documentos/docCausaApelaciones.php?valorDoc="
                                 original_url = base_url + token
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
                                     pdf_path = pdf_filename
-                                    try:
-                                        # Verificar si la vista previa ya existe
-                                        if os.path.exists(preview_path):
-                                            print(f"[INFO] La vista previa {preview_path} ya existe. No se generará nuevamente.")
-                                        else:
-                                            print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                            # Convertir la primera página del PDF a imagen
-                                            images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                            if images and len(images) > 0:
-                                                # Guardar solo la primera página como imagen
-                                                images[0].save(preview_path, 'PNG')
-                                                print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                            else:
-                                                print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                    except Exception as prev_error:
-                                        print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+   
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                         
@@ -1604,10 +1535,10 @@ class ControladorLupaCivil(ControladorLupa):
                                     token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
                                     if numero_causa:
                                         pdf_filename = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                        preview_path = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                      
                                     else:
                                         pdf_filename = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                        preview_path = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                       
                                     if token:
                                         # Determinar la URL base según el tipo de documento
                                         if "docuS.php" in pdf_form.get_attribute("action"):
@@ -1618,19 +1549,7 @@ class ControladorLupaCivil(ControladorLupa):
                                         pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                         if pdf_descargado:
                                             pdf_path = pdf_filename
-                                            try:
-                                                if os.path.exists(preview_path):
-                                                    print(f"[INFO] La vista previa {preview_path} ya existe")
-                                                else:
-                                                    print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                                    images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                                    if images and len(images) > 0:
-                                                        images[0].save(preview_path, 'PNG')
-                                                        print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                                    else:
-                                                        print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                            except Exception as prev_error:
-                                                print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                                            
                                 else:
                                     print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                                 
@@ -1935,29 +1854,16 @@ class ControladorLupaCobranza(ControladorLupa):
                                     token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
                                     if numero_causa:
                                         pdf_filename = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                        preview_path = f"{carpeta_historia}/Causa_{numero_causa}_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                    
                                     else:
                                         pdf_filename = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.pdf"
-                                        preview_path = f"{carpeta_historia}/Causa_sin_numero_folio_{folio}_fecha_{fecha_tramite_str.replace('/', '_')}.png"
+                                       
                                     if token:
                                         base_url = "https://oficinajudicialvirtual.pjud.cl/misCausas/cobranza/documentos/docuCobranza.php?dtaDoc="
                                         original_url = base_url + token
                                         pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                         if pdf_descargado:
-                                            pdf_path = pdf_filename
-                                            try:
-                                                if os.path.exists(preview_path):
-                                                    print(f"[INFO] La vista previa {preview_path} ya existe")
-                                                else:
-                                                    print(f"[INFO] Generando vista previa del PDF para {pdf_filename}...")
-                                                    images = convert_from_path(pdf_filename, first_page=1, last_page=1)
-                                                    if images and len(images) > 0:
-                                                        images[0].save(preview_path, 'PNG')
-                                                        print(f"[INFO] Vista previa guardada en: {preview_path}")
-                                                    else:
-                                                        print(f"[WARN] No se pudo generar la vista previa para {pdf_filename}")
-                                            except Exception as prev_error:
-                                                print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
+                                            pdf_path = pdf_filename                                            
                                 else:
                                     print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
                                 
@@ -2407,19 +2313,7 @@ def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
                     except Exception as e:
                         logging.error(f"Error adjuntando archivo {movimiento.pdf_path}: {str(e)}")
                 
-                # Adjuntar archivos de apelaciones si existen
-                if movimiento.tiene_archivos_apelaciones():
-                    for archivo in movimiento.archivos_apelaciones:
-                        # Excluir archivos preview.png
-                        if not archivo.endswith('preview.png'):
-                            try:
-                                if os.path.exists(archivo):
-                                    with open(archivo, 'rb') as f:
-                                        part = MIMEApplication(f.read(), Name=os.path.basename(archivo))
-                                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(archivo)}"'
-                                        msg.attach(part)
-                            except Exception as e:
-                                logging.error(f"Error adjuntando archivo de apelaciones {archivo}: {str(e)}")
+            
         
         # Enviar correo con reintentos
         max_intentos = 3
