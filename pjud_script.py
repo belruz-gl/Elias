@@ -569,6 +569,7 @@ class ControladorLupa:
                                 original_url = base_url + token
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
+                                    pdf_path = pdf_filename
                                     try:
                                         # Verificar si la vista previa ya existe
                                         if os.path.exists(preview_path):
@@ -847,7 +848,39 @@ class ControladorLupaSuprema(ControladorLupa):
             'expected_headers': ['Folio', 'Tipo', 'Descripción', 'Fecha', 'Documento'],
             'process_content': True
         }
-
+    def _cambiar_pestana_modal(self, caratulado, tab_name):
+        try:
+            print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
+            self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
+            self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
+            self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
+            random_sleep(1, 2)
+            print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
+            try:
+                print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
+                self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
+                self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
+                print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
+                self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
+                random_sleep(1, 2)
+                print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
+                carpeta_general = tab_name.replace(' ', '_')
+                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
+                subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
+                
+                # Crear la subcarpeta si no existe
+                if not os.path.exists(subcarpeta):
+                    os.makedirs(subcarpeta)
+                    
+                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                self._cerrar_ambos_modales()
+            except Exception as e:
+                print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
+                self._cerrar_ambos_modales()
+        except Exception as e:
+            print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
+            self._cerrar_ambos_modales()
+            
     def manejar(self, tab_name):
         try:
             print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
@@ -872,7 +905,6 @@ class ControladorLupaSuprema(ControladorLupa):
                     self._verificar_modal()
                     self._verificar_tabla()
                     movimientos_nuevos = self._procesar_contenido_suprema(tab_name, caratulado)
-                    self._cambiar_pestana_modal(caratulado, tab_name)
                     self._cerrar_modal()
                     
                     #break para procesar solo la primera lupa por ahora
@@ -1000,14 +1032,14 @@ class ControladorLupaSuprema(ControladorLupa):
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento {folio if 'folio' in locals() else ''}: {str(e)}")
                     continue
+            
+            # Cambiar a la pestaña de Apelaciones antes de retornar
+            self._cambiar_pestana_modal(caratulado, tab_name)
+            
             return movimientos_nuevos
         except Exception as e:
             print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
-
-    def _cambiar_pestana_modal(self, caratulado, tab_name):
-        # La pestaña de Apelaciones no tiene subpestañas, por lo que no hacemos nada
-        pass
 
 class ControladorLupaApelacionesPrincipal(ControladorLupa):
     def obtener_config(self):
