@@ -960,13 +960,14 @@ class ControladorLupaSuprema(ControladorLupa):
     def _procesar_contenido_suprema(self, tab_name, caratulado):
         try:
             print(f"[INFO] Verificando movimientos nuevos en pestaña '{tab_name}'...")
-            self.page.wait_for_selector("table.table-titulos", timeout=10000)
-            panel = self.page.query_selector("table.table-titulos")
+            # Cambiar el selector para obtener el panel completo
+            panel = self.page.query_selector("#modalDetalleMisCauSuprema .modal-body .panel.panel-default")
             numero_causa = None
             if panel:
                 panel.scroll_into_view_if_needed()
                 random_sleep(1, 2)
                 try:
+                    # Buscar el número de causa en el panel completo
                     libro_td = panel.query_selector("td:has-text('Libro')")
                     if libro_td:
                         libro_text = libro_td.inner_text()
@@ -1016,6 +1017,14 @@ class ControladorLupaSuprema(ControladorLupa):
                                 print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
                             else:
                                 try:
+                                    # Hacer scroll suave al panel
+                                    self.page.evaluate("""
+                                        (element) => {
+                                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                    """, panel)
+                                    random_sleep(1, 2)
+                                    # Tomar la captura del panel completo
                                     panel.screenshot(path=detalle_panel_path)
                                     print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
                                 except Exception as e:
@@ -1185,7 +1194,7 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
             
             # Si llegamos aquí, el modal parece estar en buen estado
             # Continuar con el procesamiento normal
-            panel = self.page.query_selector("table.table-titulos")
+            panel = self.page.query_selector("#modalDetalleMisCauApelaciones .modal-body .panel.panel-default")
             numero_causa = None
             if panel:
                 try:
@@ -1237,8 +1246,19 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                             if os.path.exists(detalle_panel_path):
                                 print(f"[INFO] El archivo {detalle_panel_path} ya existe. No se generará nuevamente.")
                             else:
-                                panel.screenshot(path=detalle_panel_path)
-                                print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                                try:
+                                    # Hacer scroll suave al panel
+                                    self.page.evaluate("""
+                                        (element) => {
+                                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        }
+                                    """, panel)
+                                    random_sleep(1, 2)
+                                    # Tomar la captura del panel completo
+                                    panel.screenshot(path=detalle_panel_path)
+                                    print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
+                                except Exception as e:
+                                    print(f"[WARN] No se pudo tomar la captura del panel: {str(e)}")
                         pdf_form = movimiento.query_selector("form[name='frmDoc']")
                         pdf_path = None
                         if pdf_form:
