@@ -2297,58 +2297,54 @@ def construir_cuerpo_html(movimientos):
         <head>
             <style>
                 body { font-family: Arial, sans-serif; }
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; }
-                tr:nth-child(even) { background-color: #f9f9f9; }
+                .movimiento { margin-bottom: 20px; }
+                .movimiento h3 { color: #333; margin-bottom: 10px; }
+                .movimiento ul { list-style-type: none; padding-left: 20px; }
+                .movimiento li { margin-bottom: 5px; }
+                .archivos-apelaciones { margin-top: 10px; padding-left: 20px; }
                 .sin-pdf { color: #666; font-style: italic; }
-                .archivos-apelaciones { margin-top: 5px; font-size: 0.9em; color: #666; }
             </style>
         </head>
         <body>
-            <h2>Resumen de Movimientos</h2>
-            <table>
-                <tr>
-                    <th>Folio</th>
-                    <th>Sección</th>
-                    <th>Caratulado</th>
-                    <th>N° Causa</th>
-                    <th>Fecha</th>
-                    <th>Documento</th>
-                </tr>
+            <p>Estimado,</p>
+            <p>Junto con saludar y esperando que se encuentre muy bien, envío movimientos nuevos y su PDF asociado.</p>
+            <p>Detalle de documentos:</p>
         """
         
-        for movimiento in movimientos:
-            # Determinar la clase CSS y el texto del documento
-            if movimiento.tiene_pdf():
-                doc_class = ""
-                doc_text = os.path.basename(movimiento.pdf_path)
-            else:
-                doc_class = "sin-pdf"
-                doc_text = "No hay PDF asociado"
+        for idx, movimiento in enumerate(movimientos, 1):
+            html += f"""
+            <div class="movimiento">
+                <h3>Movimiento {idx}:</h3>
+                <ul>
+                    <li><strong>Sección:</strong> {movimiento.seccion}</li>
+                    <li><strong>N° Causa:</strong> {movimiento.numero_causa}</li>
+                    <li><strong>Caratulado:</strong> {movimiento.caratulado}</li>
+                    <li><strong>Fecha Trámite:</strong> {movimiento.fecha}</li>
+                    <li><strong>Documento:</strong> {os.path.basename(movimiento.pdf_path) if movimiento.tiene_pdf() else '<span class="sin-pdf">No hay PDF asociado</span>'}</li>
+            """
             
-            # Agregar archivos de apelaciones si existen
-            if movimiento.tiene_archivos_apelaciones():
-                doc_text += '<div class="archivos-apelaciones">'
-                doc_text += '<strong>Archivos de apelaciones:</strong><br>'
+            # Agregar archivos de apelaciones solo para Corte Suprema
+            if movimiento.seccion == "Corte Suprema" and movimiento.tiene_archivos_apelaciones():
+                html += """
+                    <li>
+                        <strong>Archivos de apelaciones:</strong>
+                        <div class="archivos-apelaciones">
+                """
                 for archivo in movimiento.archivos_apelaciones:
                     if not archivo.endswith('preview.png'):
-                        doc_text += f"- {os.path.basename(archivo)}<br>"
-                doc_text += '</div>'
+                        html += f"<div>- {os.path.basename(archivo)}</div>"
+                html += """
+                        </div>
+                    </li>
+                """
             
-            html += f"""
-                <tr>
-                    <td>{movimiento.folio}</td>
-                    <td>{movimiento.seccion}</td>
-                    <td>{movimiento.caratulado}</td>
-                    <td>{movimiento.numero_causa}</td>
-                    <td>{movimiento.fecha}</td>
-                    <td class="{doc_class}">{doc_text}</td>
-                </tr>
+            html += """
+                </ul>
+            </div>
             """
         
         html += """
-            </table>
+            <p>Saludos cordiales</p>
         </body>
         </html>
         """
