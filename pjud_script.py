@@ -1010,7 +1010,8 @@ class ControladorLupaSuprema(ControladorLupa):
                             os.makedirs(carpeta_caratulado)
                         else:
                             print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
-                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        # Modificar el formato del nombre del archivo para incluir el número de causa
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa_{numero_causa}.png" if numero_causa else f"{carpeta_caratulado}/Detalle_causa.png"
                         if panel:
                             # Verificar si el archivo ya existe
                             if os.path.exists(detalle_panel_path):
@@ -1240,7 +1241,8 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                             os.makedirs(carpeta_caratulado)
                         else:
                             print(f"[INFO] La carpeta {carpeta_caratulado} ya existe.")
-                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa.png"
+                        # Modificar el formato del nombre del archivo para incluir el número de causa
+                        detalle_panel_path = f"{carpeta_caratulado}/Detalle_causa_{numero_causa}.png" if numero_causa else f"{carpeta_caratulado}/Detalle_causa.png"
                         if panel:
                             # Verificar si el archivo ya existe
                             if os.path.exists(detalle_panel_path):
@@ -1465,7 +1467,7 @@ class ControladorLupaCivil(ControladorLupa):
                             """, panel)
                             random_sleep(1, 2)
                             # Intentar captura de pantalla con timeout más corto
-                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_Cuaderno_{texto_limpio}.png"
+                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_{numero_causa}_Cuaderno_{texto_limpio}.png" if numero_causa else f"{carpeta_cuaderno}/Detalle_causa_Cuaderno_{texto_limpio}.png"
                             try:
                                 panel.screenshot(path=detalle_panel_path, timeout=10000)
                                 print(f"[INFO] Captura del panel guardada: {detalle_panel_path}")
@@ -1746,7 +1748,7 @@ class ControladorLupaCobranza(ControladorLupa):
                                     const targetOption = options.find(opt => opt.textContent.trim() === '{texto}');
                                     
                                     if (!targetOption) {{
-                                        console.log('No se encontró la opción:', '{texto}')
+                                        console.log('No se encontró la opción:', '{texto}');
                                         return false;
                                     }}
                                     
@@ -1822,7 +1824,7 @@ class ControladorLupaCobranza(ControladorLupa):
                             random_sleep(1, 2)
                             
                             # Guardar captura del panel
-                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_Cobranza_Cuaderno_{texto_limpio}.png"
+                            detalle_panel_path = f"{carpeta_cuaderno}/Detalle_causa_{numero_causa}_Cuaderno_{texto_limpio}.png" if numero_causa else f"{carpeta_cuaderno}/Detalle_causa_Cuaderno_{texto_limpio}.png"
                             panel.screenshot(path=detalle_panel_path)
                             print(f"[INFO] Captura del panel guardada: {detalle_panel_path}")
                         else:
