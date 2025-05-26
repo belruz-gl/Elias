@@ -2260,130 +2260,103 @@ def automatizar_poder_judicial(page, username, password):
         return False
 
 
-def extraer_metadata_pdf(pdf_path):
-    """Extrae metadata de un archivo PDF"""
-    try:
-        metadata = {
-            'num_paginas': 0,
-            'materia': '',
-            'fecha': '',
-            'titulo': '',
-            'autor': ''
-        }
-        
-        with open(pdf_path, 'rb') as file:
-            pdf = PdfReader(file)
-            metadata['num_paginas'] = len(pdf.pages)
-            
-            # Extraer texto de la primera página para análisis
-            if len(pdf.pages) > 0:
-                texto = pdf.pages[0].extract_text()
-                
-                # Buscar materia usando patrones comunes
-                materia_patterns = [
-                    r'Materia:\s*([^\n]+)',
-                    r'Asunto:\s*([^\n]+)',
-                    r'Causa:\s*([^\n]+)'
-                ]
-                for pattern in materia_patterns:
-                    match = re.search(pattern, texto)
-                    if match:
-                        metadata['materia'] = match.group(1).strip()
-                        break
-                
-                # Buscar fecha usando patrones comunes
-                fecha_patterns = [
-                    r'Fecha:\s*(\d{2}/\d{2}/\d{4})',
-                    r'(\d{2}/\d{2}/\d{4})',
-                    r'(\d{2}-\d{2}-\d{4})'
-                ]
-                for pattern in fecha_patterns:
-                    match = re.search(pattern, texto)
-                    if match:
-                        metadata['fecha'] = match.group(1).strip()
-                        break
-                
-                # Extraer título del nombre del archivo
-                nombre_archivo = os.path.basename(pdf_path)
-                metadata['titulo'] = os.path.splitext(nombre_archivo)[0]
-        
-        return metadata
-    except Exception as e:
-        logging.error(f"Error extrayendo metadata del PDF {pdf_path}: {str(e)}")
-        return None
 
 def construir_cuerpo_html(movimientos):
-    """Construye el cuerpo del correo en formato HTML con la tabla solicitada."""
-    try:
-        html = """
+    if not movimientos:
+        return """
         <html>
         <head>
             <style>
                 body { font-family: Arial, sans-serif; }
-                .movimiento { margin-bottom: 20px; }
-                .movimiento h3 { color: #333; margin-bottom: 10px; }
-                .movimiento ul { list-style-type: none; padding-left: 20px; }
-                .movimiento li { margin-bottom: 5px; }
-                .archivos-apelaciones { margin-top: 10px; padding-left: 20px; }
-                .sin-pdf { color: #666; font-style: italic; }
+                .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+                .message { text-align: center; font-size: 18px; color: #666; }
             </style>
         </head>
         <body>
-            <p>Estimado,</p>
-            <p>Junto con saludar y esperando que se encuentre muy bien, envío movimientos nuevos y su PDF asociado.</p>
-            <p>Detalle de documentos:</p>
-        """
-        
-        for idx, movimiento in enumerate(movimientos, 1):
-            html += f"""
-            <div class="movimiento">
-                <h3>Movimiento {idx}:</h3>
-                <ul>
-                    <li><strong>Sección:</strong> {movimiento.seccion}</li>
-                    <li><strong>N° Causa:</strong> {movimiento.numero_causa}</li>
-                    <li><strong>Caratulado:</strong> {movimiento.caratulado}</li>
-            """
-            
-            # Agregar Historia Causa Cuaderno para Civil y Cobranza
-            if (movimiento.seccion in ["Civil", "Cobranza"]) and movimiento.historia_causa_cuaderno:
-                html += f"""
-                    <li><strong>Historia Causa Cuaderno:</strong> {movimiento.historia_causa_cuaderno}</li>
-                """
-            
-            html += f"""
-                    <li><strong>Fecha Trámite:</strong> {movimiento.fecha}</li>
-                    <li><strong>Documento:</strong> {os.path.basename(movimiento.pdf_path) if movimiento.tiene_pdf() else '<span class="sin-pdf">No hay PDF asociado</span>'}</li>
-            """
-            
-            # Agregar archivos de apelaciones solo para Corte Suprema
-            if movimiento.seccion == "Corte Suprema" and movimiento.tiene_archivos_apelaciones():
-                html += """
-                    <li>
-                        <strong>Archivos de apelaciones:</strong>
-                        <div class="archivos-apelaciones">
-                """
-                for archivo in movimiento.archivos_apelaciones:
-                    if not archivo.endswith('preview.png'):
-                        html += f"<div>- {os.path.basename(archivo)}</div>"
-                html += """
-                        </div>
-                    </li>
-                """
-            
-            html += """
-                </ul>
+            <div class="container">
+                <div class="message">
+                    <p>No hay nuevos movimientos para reportar en el Poder Judicial.</p>
+                </div>
             </div>
-            """
-        
-        html += """
-            <p>Saludos cordiales</p>
         </body>
         </html>
         """
-        return html
-    except Exception as e:
-        logging.error(f"Error construyendo cuerpo HTML: {str(e)}")
-        return None
+
+    html = """
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; }
+            .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+            .movimiento { margin-bottom: 30px; }
+            .movimiento h3 { color: #333; margin-top: 0; }
+            .movimiento ul { list-style-type: none; padding-left: 0; }
+            .movimiento li { margin-bottom: 10px; }
+            .movimiento strong { color: #555; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <p>Estimado,</p>
+            <p>Junto con saludar y esperando que se encuentre muy bien, envío movimientos nuevos y su PDF asociado.</p>
+            <p>Detalle de documentos:</p>
+    """
+
+    for i, mov in enumerate(movimientos, 1):
+        html += f"""
+            <div class="movimiento">
+                <h3>Movimiento {i}:</h3>
+                <ul>
+                    <li><strong>Sección:</strong> {mov.seccion}</li>
+                    <li><strong>N° Causa:</strong> {mov.numero_causa}</li>
+                    <li><strong>Caratulado:</strong> {mov.caratulado}</li>"""
+
+        if mov.historia_causa_cuaderno:
+            html += f"""
+                    <li><strong>Historia Causa Cuaderno:</strong> {mov.historia_causa_cuaderno}</li>"""
+
+        html += f"""
+                    <li><strong>Fecha Trámite:</strong> {mov.fecha}</li>
+                    <li><strong>Documento:</strong> {os.path.basename(mov.pdf_path) if mov.pdf_path else 'No disponible'}</li>"""
+
+        # Agregar Detalle Causa
+        if mov.seccion == "Corte Suprema":
+            html += f"""
+                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}.png</li>"""
+        elif mov.seccion == "Civil":
+            html += f"""
+                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
+        elif mov.seccion == "Cobranza":
+            html += f"""
+                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
+
+        # Agregar sección de Apelaciones si existe
+        if mov.archivos_apelaciones:
+            html += """
+                    <li><strong>Apelaciones:</strong>
+                        <ul>
+                            <li>Archivos
+                                <ul>"""
+            for archivo in mov.archivos_apelaciones:
+                html += f"""
+                                    <li>{os.path.basename(archivo)}</li>"""
+            html += """
+                                </ul>
+                            </li>
+                            <li>Detalle Apelación: Apelacion_Detalle_causa_{mov.numero_causa}.png</li>
+                        </ul>
+                    </li>"""
+
+        html += """
+                </ul>
+            </div>"""
+
+    html += """
+        </div>
+    </body>
+    </html>
+    """
+    return html
 
 def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
     """Envía un correo electrónico con archivos adjuntos"""
