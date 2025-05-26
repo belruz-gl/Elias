@@ -58,13 +58,14 @@ USER_AGENTS = [
 ]
 
 class MovimientoPJUD:
-    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None):
+    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None, cuaderno=None):
         self.folio = folio
         self.seccion = seccion
         self.caratulado = caratulado
         self.numero_causa = numero_causa
         self.fecha = fecha
         self.pdf_path = pdf_path  # None si no hay PDF
+        self.cuaderno = cuaderno  # Agregamos el cuaderno
     
     def tiene_pdf(self):
         return self.pdf_path is not None and os.path.exists(self.pdf_path)
@@ -76,7 +77,8 @@ class MovimientoPJUD:
             'caratulado': self.caratulado,
             'numero_causa': self.numero_causa,
             'fecha': self.fecha,
-            'pdf_path': self.pdf_path
+            'pdf_path': self.pdf_path,
+            'cuaderno': self.cuaderno
         }
     
     def __eq__(self, other):
@@ -86,7 +88,8 @@ class MovimientoPJUD:
                 self.seccion == other.seccion and 
                 self.caratulado == other.caratulado and 
                 self.numero_causa == other.numero_causa and 
-                self.fecha == other.fecha)
+                self.fecha == other.fecha and
+                self.cuaderno == other.cuaderno)  # Incluimos el cuaderno en la comparación
 
 # Lista global para almacenar todos los movimientos
 MOVIMIENTOS_GLOBALES = []
@@ -598,7 +601,10 @@ class ControladorLupa:
                             fecha=fecha_tramite_str,
                             pdf_path=pdf_path
                         )
-                        agregar_movimiento_sin_duplicar(movimiento_pjud)
+                        if agregar_movimiento_sin_duplicar(movimiento_pjud):
+                            print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
+                        else:
+                            print(f"[INFO] El movimiento ya existía en el diccionario global")
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento: {str(e)}")
                     continue
@@ -1026,7 +1032,10 @@ class ControladorLupaSuprema(ControladorLupa):
                             fecha=fecha_tramite_str,
                             pdf_path=pdf_path
                         )
-                        agregar_movimiento_sin_duplicar(movimiento_pjud)
+                        if agregar_movimiento_sin_duplicar(movimiento_pjud):
+                            print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
+                        else:
+                            print(f"[INFO] El movimiento ya existía en el diccionario global")
                     else:
                         print(f"[INFO] Movimiento ignorado - Folio: {folio}, Fecha: {fecha_tramite_str} (no coincide con fecha objetivo)")
                 except Exception as e:
@@ -1240,7 +1249,10 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                             fecha=fecha_tramite_str,
                             pdf_path=pdf_path
                         )
-                        agregar_movimiento_sin_duplicar(movimiento_pjud)
+                        if agregar_movimiento_sin_duplicar(movimiento_pjud):
+                            print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
+                        else:
+                            print(f"[INFO] El movimiento ya existía en el diccionario global")
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento: {str(e)}")
                     continue
@@ -1607,9 +1619,13 @@ class ControladorLupaCivil(ControladorLupa):
                                     caratulado=caratulado,
                                     numero_causa=numero_causa,
                                     fecha=fecha_tramite_str,
-                                    pdf_path=pdf_path
+                                    pdf_path=pdf_path,
+                                    cuaderno=texto  # Agregamos el nombre del cuaderno
                                 )
-                                agregar_movimiento_sin_duplicar(movimiento_pjud)
+                                if agregar_movimiento_sin_duplicar(movimiento_pjud):
+                                    print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
+                                else:
+                                    print(f"[INFO] El movimiento ya existía en el diccionario global")
                         except Exception as e:
                             print(f"[ERROR] Error procesando movimiento: {str(e)}")
                             continue
@@ -1896,9 +1912,13 @@ class ControladorLupaCobranza(ControladorLupa):
                                     caratulado=caratulado,
                                     numero_causa=numero_causa,
                                     fecha=fecha_tramite_str,
-                                    pdf_path=pdf_path
+                                    pdf_path=pdf_path,
+                                    cuaderno=texto  # Agregamos el nombre del cuaderno
                                 )
-                                agregar_movimiento_sin_duplicar(movimiento_pjud)
+                                if agregar_movimiento_sin_duplicar(movimiento_pjud):
+                                    print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
+                                else:
+                                    print(f"[INFO] El movimiento ya existía en el diccionario global")
                         except Exception as e:
                             print(f"[ERROR] Error procesando movimiento: {str(e)}")
                             continue
