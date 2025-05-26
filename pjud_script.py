@@ -2105,7 +2105,6 @@ def automatizar_poder_judicial(page, username, password):
         
         # Limpiar la lista global de movimientos
         MOVIMIENTOS_GLOBALES.clear()
-        error_seleccion = False
         
         # Abrir la página principal
         print("Accediendo a la página principal de PJUD...")
@@ -2148,24 +2147,20 @@ def automatizar_poder_judicial(page, username, password):
                         print(f"  Ruta PDF: {movimiento.pdf_path}")
                 print("\n===========================================\n")
                 
-                # Enviar correo según el caso
-                if error_seleccion:
-                    enviar_correo(asunto="Error al procesar movimientos PJUD")
-                elif MOVIMIENTOS_GLOBALES:
-                    asunto = f"Nuevos movimientos PJUD - {datetime.now().strftime('%d/%m/%Y')}"
+                # Enviar correo solo en los dos casos principales
+                if MOVIMIENTOS_GLOBALES:
+                    asunto = f"Nuevos movimientos en el Poder Judicial"
                     enviar_correo(MOVIMIENTOS_GLOBALES, asunto)
                 else:
-                    enviar_correo(asunto="No hay nuevos movimientos PJUD")
+                    enviar_correo(asunto="No hay nuevos movimientos en el Poder Judicial")
                 
                 return True
             else:
                 print("No se pudo completar el proceso de login")
-                enviar_correo(asunto="Error en automatización PJUD - Login fallido")
                 return False
                 
     except Exception as e:
         print(f"Error en la automatización del Poder Judicial: {str(e)}")
-        enviar_correo(asunto="Error en automatización PJUD")
         return False
 
 
@@ -2308,10 +2303,23 @@ def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
         msg['To'] = ", ".join(EMAIL_RECIPIENTS)
         msg['Subject'] = asunto
         
-        # Si no hay movimientos, enviar mensaje simple
+        # Si no hay movimientos, enviar mensaje HTML simple
         if not movimientos:
-            cuerpo = "No se encontraron nuevos movimientos para reportar."
-            msg.attach(MIMEText(cuerpo, 'plain'))
+            html = """
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                </style>
+            </head>
+            <body>
+                <p>Estimado,</p>
+                <p>Junto con saludar y esperando que se encuentre muy bien, le informo que no se encontraron nuevos movimientos para reportar en el Poder Judicial.</p>
+                <p>Saludos cordiales</p>
+            </body>
+            </html>
+            """
+            msg.attach(MIMEText(html, 'html'))
         else:
             # Construir cuerpo HTML con los movimientos
             html_cuerpo = construir_cuerpo_html(movimientos)
@@ -2402,11 +2410,8 @@ def main():
         # Ejecutar la automatización de PJUD
         automatizar_poder_judicial(page, USERNAME, PASSWORD)
         
-        
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
-        if all([EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECIPIENTS]):
-            enviar_correo(asunto="Error crítico en automatización")
 
     finally:
         if browser:
