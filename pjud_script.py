@@ -620,6 +620,7 @@ class ControladorLupa:
             print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
             return False
 
+#Expediente Corte Apelaciones, pestaña dentro de corte suprema
     def _cambiar_pestana_modal(self, caratulado, tab_name):
         try:
             print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
@@ -643,6 +644,41 @@ class ControladorLupa:
                 # Crear la subcarpeta si no existe
                 if not os.path.exists(subcarpeta):
                     os.makedirs(subcarpeta)
+                
+                # Capturar el panel de detalle de causa
+                try:
+                    print("  Intentando capturar panel de detalles de apelaciones...")
+                    panel = self.page.query_selector("#modalDetalleApelaciones .modal-body .panel.panel-default")
+                    numero_causa = None
+                    if panel:
+                        # Extraer el número de causa del Libro
+                        try:
+                            libro_td = panel.query_selector("td:has-text('Libro')")
+                            if libro_td:
+                                libro_text = libro_td.inner_text()
+                                match = re.search(r'Protección\s*-\s*(\d+)', libro_text)
+                                if match:
+                                    numero_causa = match.group(1)
+                                    print(f"[INFO] Número de causa extraído: {numero_causa}")
+                        except Exception as e:
+                            print(f"[WARN] No se pudo extraer el número de causa: {str(e)}")
+                        
+                        # Hacer scroll suave al panel
+                        self.page.evaluate("""
+                            (element) => {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        """, panel)
+                        random_sleep(1, 2)
+                        
+                        # Guardar la captura del panel
+                        detalle_panel_path = f"{subcarpeta}/Apelacion_Detalle_causa_{numero_causa}.png" if numero_causa else f"{subcarpeta}/Apelacion_Detalle_causa.png"
+                        panel.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del panel de apelaciones guardada: {detalle_panel_path}")
+                    else:
+                        print("[WARN] No se encontró el panel de información de apelaciones")
+                except Exception as panel_error:
+                    print(f"[WARN] No se pudo capturar el panel de apelaciones: {str(panel_error)}")
                     
                 archivos_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
                 
@@ -898,6 +934,44 @@ class ControladorLupaSuprema(ControladorLupa):
                 # Crear la subcarpeta si no existe
                 if not os.path.exists(subcarpeta):
                     os.makedirs(subcarpeta)
+                
+                # Capturar el panel de detalle de causa
+                try:
+                    print("  Intentando capturar panel de detalles de apelaciones...")
+                    # Esperar a que el tab-pane recursoApe esté activo
+                    self.page.wait_for_selector("#recursoApe.active", timeout=5000)
+                    # Buscar el panel dentro del tab-pane recursoApe
+                    panel = self.page.query_selector("#recursoApe .panel.panel-default")
+                    numero_causa = None
+                    if panel:
+                        # Extraer el número de causa del Libro
+                        try:
+                            libro_td = panel.query_selector("td:has-text('Libro')")
+                            if libro_td:
+                                libro_text = libro_td.inner_text()
+                                match = re.search(r'Protección\s*-\s*(\d+)', libro_text)
+                                if match:
+                                    numero_causa = match.group(1)
+                                    print(f"[INFO] Número de causa extraído: {numero_causa}")
+                        except Exception as e:
+                            print(f"[WARN] No se pudo extraer el número de causa: {str(e)}")
+                        
+                        # Hacer scroll suave al panel
+                        self.page.evaluate("""
+                            (element) => {
+                                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        """, panel)
+                        random_sleep(1, 2)
+                        
+                        # Guardar la captura del panel
+                        detalle_panel_path = f"{subcarpeta}/Apelacion_Detalle_causa_{numero_causa}.png" if numero_causa else f"{subcarpeta}/Apelacion_Detalle_causa.png"
+                        panel.screenshot(path=detalle_panel_path)
+                        print(f"[INFO] Captura del panel de apelaciones guardada: {detalle_panel_path}")
+                    else:
+                        print("[WARN] No se encontró el panel de información de apelaciones")
+                except Exception as panel_error:
+                    print(f"[WARN] No se pudo capturar el panel de apelaciones: {str(panel_error)}")
                     
                 archivos_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
                 
