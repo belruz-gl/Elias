@@ -58,7 +58,7 @@ USER_AGENTS = [
 ]
 
 class MovimientoPJUD:
-    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None, cuaderno=None):
+    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None, cuaderno=None, archivos_apelaciones=None):
         self.folio = folio
         self.seccion = seccion
         self.caratulado = caratulado
@@ -66,9 +66,13 @@ class MovimientoPJUD:
         self.fecha = fecha
         self.pdf_path = pdf_path  # None si no hay PDF
         self.cuaderno = cuaderno  # Agregamos el cuaderno
+        self.archivos_apelaciones = archivos_apelaciones or []  # Lista de archivos de apelaciones
     
     def tiene_pdf(self):
         return self.pdf_path is not None and os.path.exists(self.pdf_path)
+    
+    def tiene_archivos_apelaciones(self):
+        return len(self.archivos_apelaciones) > 0
     
     def to_dict(self):
         return {
@@ -78,7 +82,8 @@ class MovimientoPJUD:
             'numero_causa': self.numero_causa,
             'fecha': self.fecha,
             'pdf_path': self.pdf_path,
-            'cuaderno': self.cuaderno
+            'cuaderno': self.cuaderno,
+            'archivos_apelaciones': self.archivos_apelaciones
         }
     
     def __eq__(self, other):
@@ -89,7 +94,7 @@ class MovimientoPJUD:
                 self.caratulado == other.caratulado and 
                 self.numero_causa == other.numero_causa and 
                 self.fecha == other.fecha and
-                self.cuaderno == other.cuaderno)  # Incluimos el cuaderno en la comparación
+                self.cuaderno == other.cuaderno)
 
 # Lista global para almacenar todos los movimientos
 MOVIMIENTOS_GLOBALES = []
@@ -637,7 +642,17 @@ class ControladorLupa:
                 if not os.path.exists(subcarpeta):
                     os.makedirs(subcarpeta)
                     
-                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                archivos_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                
+                # Buscar el movimiento correspondiente en MOVIMIENTOS_GLOBALES
+                if MOVIMIENTOS_GLOBALES and archivos_apelaciones:
+                    # Buscar el movimiento que coincida con el caratulado y la sección
+                    for movimiento in MOVIMIENTOS_GLOBALES:
+                        if movimiento.caratulado == caratulado and movimiento.seccion == tab_name:
+                            movimiento.archivos_apelaciones = archivos_apelaciones
+                            print(f"  Archivos de apelaciones agregados al movimiento con caratulado: {caratulado}")
+                            break
+                
                 self._cerrar_ambos_modales()
             except Exception as e:
                 print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
@@ -715,6 +730,7 @@ class ControladorLupa:
                 print(f"  No se pudo extraer el número de causa: {str(e)}")
             
             # Tomar captura de la sección de información de la causa
+            archivos_apelaciones = []
             try:
                 # Identificar la sección superior del modal con la información general de la causa
                 info_panel = self.page.query_selector("#modalDetalleApelaciones .modal-body > div:first-child")
@@ -735,6 +751,7 @@ class ControladorLupa:
                     # Guardar la captura de la sección de información
                     panel_screenshot_path = f"{subcarpeta}/Detalle_Causa_Apelaciones.png"
                     info_panel.screenshot(path=panel_screenshot_path)
+                    archivos_apelaciones.append(panel_screenshot_path)
                     print(f"  Captura de la información de la causa guardada en: {panel_screenshot_path}")
                 else:
                     print("  No se pudo encontrar la sección de información para capturar")
@@ -818,8 +835,9 @@ class ControladorLupa:
                                 print(f"  Descargando PDF de Apelaciones...")
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 
-                                # Generar una vista previa del PDF (primera página como imagen)
                                 if pdf_descargado:
+                                    archivos_apelaciones.append(pdf_filename)
+                                    # Generar una vista previa del PDF (primera página como imagen)
                                     try:
                                         print(f"  Generando vista previa del PDF para {pdf_filename}...")
                                         # Convertir la primera página del PDF a imagen
@@ -827,6 +845,7 @@ class ControladorLupa:
                                         if images and len(images) > 0:
                                             # Guardar solo la primera página como imagen
                                             images[0].save(preview_path, 'PNG')
+                                            archivos_apelaciones.append(preview_path)
                                             print(f"  Vista previa guardada en: {preview_path}")
                                         else:
                                             print(f"  No se pudo generar la vista previa para {pdf_filename}")
@@ -838,11 +857,11 @@ class ControladorLupa:
                     print(f"  Error procesando movimiento de Apelaciones: {str(e)}")
                     continue
             
-            return True
+            return archivos_apelaciones
             
         except Exception as e:
             print(f"  Error al verificar movimientos en modal de Apelaciones: {str(e)}")
-            return False
+            return []
 
 class ControladorLupaSuprema(ControladorLupa):
     def obtener_config(self):
@@ -878,7 +897,17 @@ class ControladorLupaSuprema(ControladorLupa):
                 if not os.path.exists(subcarpeta):
                     os.makedirs(subcarpeta)
                     
-                movimientos_en_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                archivos_apelaciones = self._verificar_movimientos_apelaciones(subcarpeta)
+                
+                # Buscar el movimiento correspondiente en MOVIMIENTOS_GLOBALES
+                if MOVIMIENTOS_GLOBALES and archivos_apelaciones:
+                    # Buscar el movimiento que coincida con el caratulado y la sección
+                    for movimiento in MOVIMIENTOS_GLOBALES:
+                        if movimiento.caratulado == caratulado and movimiento.seccion == tab_name:
+                            movimiento.archivos_apelaciones = archivos_apelaciones
+                            print(f"  Archivos de apelaciones agregados al movimiento con caratulado: {caratulado}")
+                            break
+                
                 self._cerrar_ambos_modales()
             except Exception as e:
                 print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
@@ -2273,6 +2302,7 @@ def construir_cuerpo_html(movimientos):
                 th { background-color: #f2f2f2; }
                 tr:nth-child(even) { background-color: #f9f9f9; }
                 .sin-pdf { color: #666; font-style: italic; }
+                .archivos-apelaciones { margin-top: 5px; font-size: 0.9em; color: #666; }
             </style>
         </head>
         <body>
@@ -2296,6 +2326,15 @@ def construir_cuerpo_html(movimientos):
             else:
                 doc_class = "sin-pdf"
                 doc_text = "No hay PDF asociado"
+            
+            # Agregar archivos de apelaciones si existen
+            if movimiento.tiene_archivos_apelaciones():
+                doc_text += '<div class="archivos-apelaciones">'
+                doc_text += '<strong>Archivos de apelaciones:</strong><br>'
+                for archivo in movimiento.archivos_apelaciones:
+                    if not archivo.endswith('preview.png'):
+                        doc_text += f"- {os.path.basename(archivo)}<br>"
+                doc_text += '</div>'
             
             html += f"""
                 <tr>
@@ -2342,8 +2381,9 @@ def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
             if html_cuerpo:
                 msg.attach(MIMEText(html_cuerpo, 'html'))
             
-            # Adjuntar solo los PDFs que existen
+            # Adjuntar PDFs y archivos de apelaciones
             for movimiento in movimientos:
+                # Adjuntar PDF principal si existe
                 if movimiento.tiene_pdf():
                     try:
                         with open(movimiento.pdf_path, 'rb') as f:
@@ -2352,6 +2392,20 @@ def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
                             msg.attach(part)
                     except Exception as e:
                         logging.error(f"Error adjuntando archivo {movimiento.pdf_path}: {str(e)}")
+                
+                # Adjuntar archivos de apelaciones si existen
+                if movimiento.tiene_archivos_apelaciones():
+                    for archivo in movimiento.archivos_apelaciones:
+                        # Excluir archivos preview.png
+                        if not archivo.endswith('preview.png'):
+                            try:
+                                if os.path.exists(archivo):
+                                    with open(archivo, 'rb') as f:
+                                        part = MIMEApplication(f.read(), Name=os.path.basename(archivo))
+                                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(archivo)}"'
+                                        msg.attach(part)
+                            except Exception as e:
+                                logging.error(f"Error adjuntando archivo de apelaciones {archivo}: {str(e)}")
         
         # Enviar correo con reintentos
         max_intentos = 3
