@@ -57,6 +57,47 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.78 Mobile Safari/537.36"
 ]
 
+class MovimientoPJUD:
+    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None):
+        self.folio = folio
+        self.seccion = seccion
+        self.caratulado = caratulado
+        self.numero_causa = numero_causa
+        self.fecha = fecha
+        self.pdf_path = pdf_path  # None si no hay PDF
+    
+    def tiene_pdf(self):
+        return self.pdf_path is not None and os.path.exists(self.pdf_path)
+    
+    def to_dict(self):
+        return {
+            'folio': self.folio,
+            'seccion': self.seccion,
+            'caratulado': self.caratulado,
+            'numero_causa': self.numero_causa,
+            'fecha': self.fecha,
+            'pdf_path': self.pdf_path
+        }
+    
+    def __eq__(self, other):
+        if not isinstance(other, MovimientoPJUD):
+            return False
+        return (self.folio == other.folio and 
+                self.seccion == other.seccion and 
+                self.caratulado == other.caratulado and 
+                self.numero_causa == other.numero_causa and 
+                self.fecha == other.fecha)
+
+# Lista global para almacenar todos los movimientos
+MOVIMIENTOS_GLOBALES = []
+
+def agregar_movimiento_sin_duplicar(movimiento):
+    """Agrega un movimiento a la lista global si no existe ya"""
+    if not any(m == movimiento for m in MOVIMIENTOS_GLOBALES):
+        MOVIMIENTOS_GLOBALES.append(movimiento)
+        return True
+    return False
+
 #Configura y retorna un navegador con Playwright
 def setup_browser():
 
@@ -546,6 +587,17 @@ class ControladorLupa:
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                        
+                        # Crear y agregar el movimiento a la lista global usando la nueva función
+                        movimiento_pjud = MovimientoPJUD(
+                            folio=folio,
+                            seccion=tab_name,
+                            caratulado=caratulado,
+                            numero_causa=numero_causa,
+                            fecha=fecha_tramite_str,
+                            pdf_path=pdf_path
+                        )
+                        agregar_movimiento_sin_duplicar(movimiento_pjud)
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento: {str(e)}")
                     continue
@@ -861,6 +913,11 @@ class ControladorLupaSuprema(ControladorLupa):
             movimientos = self.page.query_selector_all("table.table-bordered tbody tr")
             print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
             movimientos_nuevos = False
+            
+            # Fecha específica para Corte Suprema
+            fecha_objetivo = "01/12/2022"
+            print(f"[INFO] Buscando movimientos de la fecha: {fecha_objetivo}")
+            
             for movimiento in movimientos:
                 try:
                     tds = movimiento.query_selector_all('td')
@@ -871,7 +928,10 @@ class ControladorLupaSuprema(ControladorLupa):
                         continue
                     folio = folio_text
                     fecha_tramite_str = tds[4].inner_text().strip()
-                    if fecha_tramite_str == "01/12/2022":
+                    
+                    # Solo procesar movimientos de la fecha objetivo
+                    if fecha_tramite_str == fecha_objetivo:
+                        print(f"[INFO] Movimiento encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
                         movimientos_nuevos = True
                         carpeta_general = tab_name.replace(' ', '_')
                         carpeta_caratulado = f"{carpeta_general}/{caratulado}"
@@ -892,6 +952,7 @@ class ControladorLupaSuprema(ControladorLupa):
                                 except Exception as e:
                                     print(f"[WARN] No se pudo tomar la captura del panel: {str(e)}")
                         pdf_form = movimiento.query_selector("form[name='frmPdf']")
+                        pdf_path = None
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorFile']").get_attribute("value")
                             causa_str = f"Causa_{numero_causa}_" if numero_causa else ""
@@ -902,6 +963,8 @@ class ControladorLupaSuprema(ControladorLupa):
                                 original_url = base_url + token
                                 try:
                                     pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
+                                    if pdf_descargado:
+                                        pdf_path = pdf_filename
                                 except Exception as e:
                                     print(f"[ERROR] Error descargando PDF para folio {folio}, causa {numero_causa}: {e}")
                                     pdf_descargado = False
@@ -921,36 +984,22 @@ class ControladorLupaSuprema(ControladorLupa):
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                        
+                        # Crear y agregar el movimiento a la lista global usando la nueva función
+                        movimiento_pjud = MovimientoPJUD(
+                            folio=folio,
+                            seccion=tab_name,
+                            caratulado=caratulado,
+                            numero_causa=numero_causa,
+                            fecha=fecha_tramite_str,
+                            pdf_path=pdf_path
+                        )
+                        agregar_movimiento_sin_duplicar(movimiento_pjud)
+                    else:
+                        print(f"[INFO] Movimiento ignorado - Folio: {folio}, Fecha: {fecha_tramite_str} (no coincide con fecha objetivo)")
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento {folio if 'folio' in locals() else ''}: {str(e)}")
                     continue
-            # Restaurar el flujo original: cambiar siempre al tab interno 'Expediente Corte Apelaciones' y procesar la lupa/tab correspondiente
-            try:
-                print("  Cambiando a la pestaña 'Expediente Corte Apelaciones'...")
-                self.page.wait_for_selector(".nav-tabs li a[href='#corteApelaciones']", timeout=5000)
-                self.page.evaluate("document.querySelector('.nav-tabs li a[href=\"#corteApelaciones\"]').click();")
-                self.page.wait_for_selector("#corteApelaciones.active", timeout=5000)
-                random_sleep(1, 2)
-                print("  Cambio a pestaña 'Expediente Corte Apelaciones' exitoso")
-                # Procesar la lupa/tab de Expediente Corte Apelaciones dentro del modal
-                try:
-                    print("  Buscando la lupa en la pestaña Expediente Corte Apelaciones...")
-                    self.page.wait_for_selector("a[href='#modalDetalleApelaciones']", timeout=5000)
-                    self.page.evaluate("document.querySelector('a[href=\"#modalDetalleApelaciones\"]').click();")
-                    print("  Clic en lupa de Expediente Corte Apelaciones exitoso")
-                    self.page.wait_for_selector("h4.modal-title:has-text('Detalle Causa Apelaciones')", timeout=10000)
-                    random_sleep(1, 2)
-                    print("  Modal 'Detalle Causa Apelaciones' abierto correctamente")
-                    carpeta_general = tab_name.replace(' ', '_')
-                    carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                    subcarpeta = f"{carpeta_caratulado}/Detalle_causa_apelaciones"
-                    if not os.path.exists(subcarpeta):
-                        os.makedirs(subcarpeta)
-                    self._verificar_movimientos_apelaciones(subcarpeta)
-                except Exception as e:
-                    print(f"  Error al procesar la lupa de Expediente Corte Apelaciones: {str(e)}")
-            except Exception as e:
-                print(f"  Error al cambiar a la pestaña 'Expediente Corte Apelaciones': {str(e)}")
             return movimientos_nuevos
         except Exception as e:
             print(f"[ERROR] Error al verificar movimientos nuevos: {str(e)}")
@@ -1032,49 +1081,6 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
             
             if not modal_usable:
                 print("[WARN] El modal parece estar en estado bloqueado o incompleto. Intentando recuperarlo...")
-                
-                # Intentar "reparar" el modal inyectando contenido básico si está vacío
-                self.page.evaluate(f"""
-                    () => {{
-                        const modal = document.querySelector('{self.config["modal_selector"]}');
-                        if (!modal) return false;
-                        
-                        // Si la estructura interna parece incompleta, intentamos reiniciarla
-                        const modalBody = modal.querySelector('.modal-body');
-                        if (!modalBody || !modalBody.children || modalBody.children.length === 0) {{
-                            console.log('Intentando recuperar modal vacío...');
-                            
-                            // Asegurarse de que el modal está visible y accesible
-                            modal.style.display = 'block';
-                            modal.classList.add('in');
-                            document.body.classList.add('modal-open');
-                            
-                            // Tomar una captura del estado actual para diagnóstico
-                            return true;
-                        }}
-                    }}
-                """)
-                
-                # Ya que el modal está en estado inestable, lo mejor es cerrar y continuar
-                print("[INFO] Modal en estado inconsistente. Guardando captura y continuando...")
-                
-                # Guardar una captura de pantalla del estado actual
-                carpeta_general = tab_name.replace(' ', '_')
-                carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                if not os.path.exists(carpeta_caratulado):
-                    os.makedirs(carpeta_caratulado)
-                    
-                try:
-                    # Intentar capturar el estado del modal para diagnóstico
-                    modal = self.page.query_selector(self.config["modal_selector"])
-                    if modal:
-                        capture_path = f"{carpeta_caratulado}/modal_estado_bloqueado.png"
-                        self.page.screenshot(path=capture_path)
-                        print(f"[INFO] Captura del estado bloqueado guardada en: {capture_path}")
-                except Exception as capture_error:
-                    print(f"[WARN] No se pudo guardar captura: {str(capture_error)}")
-                    
-                # No seguir procesando, solo cerrar el modal
                 return False
             
             # Asegurarse de que el tab-pane "movimientosApe" está activo
@@ -1099,18 +1105,8 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
             """)
             
             if not tab_activo:
-                print("[WARN] No se pudo activar el tab-pane de movimientos, intentando de forma alternativa...")
-                try:
-                    # Intentar clic directo en el tab
-                    self.page.click('a[href="#movimientosApe"]')
-                    random_sleep(1, 2)
-                    
-                    # Verificar si se activó
-                    tab_activado = self.page.evaluate('() => document.querySelector("#movimientosApe").classList.contains("active")')
-                    if not tab_activado:
-                        print("[WARN] No se pudo activar el tab después de múltiples intentos")
-                except Exception as tab_error:
-                    print(f"[ERROR] Error al intentar activar el tab: {str(tab_error)}")
+                print("[WARN] No se pudo activar el tab-pane de movimientos")
+                return False
             
             # Esperar brevemente para asegurar que el tab-pane esté visible
             random_sleep(1, 2)
@@ -1136,21 +1132,12 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                         print(f"[WARN] No se pudo extraer toda la información del panel: {str(e)}")
                 except Exception as scroll_error:
                     print(f"[WARN] No se pudo hacer scroll al panel: {str(scroll_error)}")
-                    # Crear una captura de pantalla del estado actual del modal
-                    carpeta_general = tab_name.replace(' ', '_')
-                    carpeta_caratulado = f"{carpeta_general}/{caratulado}"
-                    if not os.path.exists(carpeta_caratulado):
-                        os.makedirs(carpeta_caratulado)
-                    captura_path = f"{carpeta_caratulado}/modal_error_scroll.png"
-                    self.page.screenshot(path=captura_path)
-                    print(f"[INFO] Captura del error de scroll guardada en: {captura_path}")
                     return False
             else:
                 print("[WARN] No se encontró el panel de información")
                 
             try:
                 # Usar timeout más bajo para no esperar demasiado si la tabla no está disponible
-                # Usar un selector más específico para la tabla correcta dentro del tab-pane activo
                 self.page.wait_for_selector("#modalDetalleMisCauApelaciones #movimientosApe table.table-bordered", timeout=5000)
                 movimientos = self.page.query_selector_all("#modalDetalleMisCauApelaciones #movimientosApe table.table-bordered tbody tr")
                 print(f"[INFO] Se encontraron {len(movimientos)} movimientos")
@@ -1181,6 +1168,7 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                                 panel.screenshot(path=detalle_panel_path)
                                 print(f"[INFO] Captura del panel de información guardada: {detalle_panel_path}")
                         pdf_form = movimiento.query_selector("form[name='frmDoc']")
+                        pdf_path = None
                         if pdf_form:
                             token = pdf_form.query_selector("input[name='valorDoc']").get_attribute("value")
                             # Modificar el formato del nombre del archivo según lo solicitado
@@ -1191,6 +1179,7 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                                 original_url = base_url + token
                                 pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                 if pdf_descargado:
+                                    pdf_path = pdf_filename
                                     try:
                                         # Verificar si la vista previa ya existe
                                         if os.path.exists(preview_path):
@@ -1209,6 +1198,17 @@ class ControladorLupaApelacionesPrincipal(ControladorLupa):
                                         print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                         else:
                             print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                        
+                        # Crear y agregar el movimiento a la lista global usando la nueva función
+                        movimiento_pjud = MovimientoPJUD(
+                            folio=folio,
+                            seccion=tab_name,
+                            caratulado=caratulado,
+                            numero_causa=numero_causa,
+                            fecha=fecha_tramite_str,
+                            pdf_path=pdf_path
+                        )
+                        agregar_movimiento_sin_duplicar(movimiento_pjud)
                 except Exception as e:
                     print(f"[ERROR] Error procesando movimiento: {str(e)}")
                     continue
@@ -1533,6 +1533,7 @@ class ControladorLupaCivil(ControladorLupa):
                                 print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
                                 # Buscar el formulario de PDF
                                 pdf_form = movimiento.query_selector("form[name='form']")
+                                pdf_path = None
                                 if pdf_form:
                                     token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
                                     if numero_causa:
@@ -1550,6 +1551,7 @@ class ControladorLupaCivil(ControladorLupa):
                                         original_url = base_url + token
                                         pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                         if pdf_descargado:
+                                            pdf_path = pdf_filename
                                             try:
                                                 if os.path.exists(preview_path):
                                                     print(f"[INFO] La vista previa {preview_path} ya existe")
@@ -1565,6 +1567,17 @@ class ControladorLupaCivil(ControladorLupa):
                                                 print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                                 else:
                                     print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                                
+                                # Crear y agregar el movimiento a la lista global usando la nueva función
+                                movimiento_pjud = MovimientoPJUD(
+                                    folio=folio,
+                                    seccion=tab_name,
+                                    caratulado=caratulado,
+                                    numero_causa=numero_causa,
+                                    fecha=fecha_tramite_str,
+                                    pdf_path=pdf_path
+                                )
+                                agregar_movimiento_sin_duplicar(movimiento_pjud)
                         except Exception as e:
                             print(f"[ERROR] Error procesando movimiento: {str(e)}")
                             continue
@@ -1813,6 +1826,7 @@ class ControladorLupaCobranza(ControladorLupa):
                                 print(f"[INFO] Movimiento nuevo encontrado - Folio: {folio}, Fecha: {fecha_tramite_str}")
                                 # Buscar el formulario de PDF
                                 pdf_form = movimiento.query_selector("form[name='frmDocH']")
+                                pdf_path = None
                                 if pdf_form:
                                     token = pdf_form.query_selector("input[name='dtaDoc']").get_attribute("value")
                                     if numero_causa:
@@ -1826,6 +1840,7 @@ class ControladorLupaCobranza(ControladorLupa):
                                         original_url = base_url + token
                                         pdf_descargado = descargar_pdf_directo(original_url, pdf_filename, self.page)
                                         if pdf_descargado:
+                                            pdf_path = pdf_filename
                                             try:
                                                 if os.path.exists(preview_path):
                                                     print(f"[INFO] La vista previa {preview_path} ya existe")
@@ -1841,6 +1856,17 @@ class ControladorLupaCobranza(ControladorLupa):
                                                 print(f"[ERROR] Error al generar la vista previa del PDF: {str(prev_error)}")
                                 else:
                                     print(f"[WARN] No hay PDF disponible para el movimiento {folio}")
+                                
+                                # Crear y agregar el movimiento a la lista global usando la nueva función
+                                movimiento_pjud = MovimientoPJUD(
+                                    folio=folio,
+                                    seccion=tab_name,
+                                    caratulado=caratulado,
+                                    numero_causa=numero_causa,
+                                    fecha=fecha_tramite_str,
+                                    pdf_path=pdf_path
+                                )
+                                agregar_movimiento_sin_duplicar(movimiento_pjud)
                         except Exception as e:
                             print(f"[ERROR] Error procesando movimiento: {str(e)}")
                             continue
@@ -2064,8 +2090,8 @@ def automatizar_poder_judicial(page, username, password):
     try:
         print("\n=== INICIANDO AUTOMATIZACIÓN DEL PODER JUDICIAL ===\n")
         
-        # Lista para almacenar los archivos nuevos descargados
-        archivos_nuevos = []
+        # Limpiar la lista global de movimientos
+        MOVIMIENTOS_GLOBALES.clear()
         error_seleccion = False
         
         # Abrir la página principal
@@ -2096,40 +2122,34 @@ def automatizar_poder_judicial(page, username, password):
                 # Navegar por las pestañas de Mis Causas
                 navigate_mis_causas_tabs(page)
                 
-                try:
-                    # Buscar archivos nuevos en las carpetas
-                    for carpeta in MIS_CAUSAS_TABS:
-                        carpeta_path = carpeta.replace(' ', '_')
-                        if os.path.exists(carpeta_path):
-                            for root, dirs, files in os.walk(carpeta_path):
-                                for file in files:
-                                    if file.endswith('.pdf'):
-                                        archivo_completo = os.path.join(root, file)
-                                        # Verificar si el archivo es nuevo (menos de 24 horas)
-                                        if os.path.getmtime(archivo_completo) > (time.time() - 86400):
-                                            archivos_nuevos.append(archivo_completo)
-                except Exception as e:
-                    print(f"Error al seleccionar archivos: {str(e)}")
-                    error_seleccion = True
-            
-            
-            print("\n=== AUTOMATIZACIÓN DEL PODER JUDICIAL COMPLETADA ===\n")
-            
-            # Enviar correo según el caso
-            if error_seleccion:
-                enviar_correo(asunto="Error al seleccionar archivos PJUD")
-            elif archivos_nuevos:
-                asunto = f"Nuevos documentos PJUD - {datetime.now().strftime('%d/%m/%Y')}"
-                enviar_correo(archivos_nuevos, asunto)
+                print("\n=== RESUMEN DE MOVIMIENTOS ENCONTRADOS ===")
+                for idx, movimiento in enumerate(MOVIMIENTOS_GLOBALES, 1):
+                    print(f"\nMovimiento {idx}:")
+                    print(f"  Folio: {movimiento.folio}")
+                    print(f"  Sección: {movimiento.seccion}")
+                    print(f"  Caratulado: {movimiento.caratulado}")
+                    print(f"  N° Causa: {movimiento.numero_causa}")
+                    print(f"  Fecha: {movimiento.fecha}")
+                    print(f"  PDF: {'Sí' if movimiento.tiene_pdf() else 'No'}")
+                    if movimiento.tiene_pdf():
+                        print(f"  Ruta PDF: {movimiento.pdf_path}")
+                print("\n===========================================\n")
+                
+                # Enviar correo según el caso
+                if error_seleccion:
+                    enviar_correo(asunto="Error al procesar movimientos PJUD")
+                elif MOVIMIENTOS_GLOBALES:
+                    asunto = f"Nuevos movimientos PJUD - {datetime.now().strftime('%d/%m/%Y')}"
+                    enviar_correo(MOVIMIENTOS_GLOBALES, asunto)
+                else:
+                    enviar_correo(asunto="No hay nuevos movimientos PJUD")
+                
+                return True
             else:
-                enviar_correo(asunto="No hay nuevos documentos PJUD")
-            
-            return True
-        else:
-            print("No se pudo completar el proceso de login")
-            enviar_correo(asunto="Error en automatización PJUD - Login fallido")
-            return False
-            
+                print("No se pudo completar el proceso de login")
+                enviar_correo(asunto="Error en automatización PJUD - Login fallido")
+                return False
+                
     except Exception as e:
         print(f"Error en la automatización del Poder Judicial: {str(e)}")
         enviar_correo(asunto="Error en automatización PJUD")
@@ -2188,7 +2208,7 @@ def extraer_metadata_pdf(pdf_path):
         logging.error(f"Error extrayendo metadata del PDF {pdf_path}: {str(e)}")
         return None
 
-def construir_cuerpo_html(archivos_adjuntos):
+def construir_cuerpo_html(movimientos):
     """Construye el cuerpo del correo en formato HTML con la tabla solicitada."""
     try:
         html = """
@@ -2200,45 +2220,42 @@ def construir_cuerpo_html(archivos_adjuntos):
                 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
                 th { background-color: #f2f2f2; }
                 tr:nth-child(even) { background-color: #f9f9f9; }
+                .sin-pdf { color: #666; font-style: italic; }
             </style>
         </head>
         <body>
-            <h2>Resumen de Documentos Adjuntos</h2>
+            <h2>Resumen de Movimientos</h2>
             <table>
                 <tr>
-                    <th>Documento</th>
+                    <th>Folio</th>
                     <th>Sección</th>
                     <th>Caratulado</th>
                     <th>N° Causa</th>
                     <th>Fecha</th>
+                    <th>Documento</th>
                 </tr>
         """
-        import os
-        import re
-        for archivo in archivos_adjuntos:
-            # Extraer partes de la ruta
-            partes = os.path.normpath(archivo).split(os.sep)
-            documento = os.path.basename(archivo)
-            seccion = partes[0] if len(partes) > 1 else ''
-            caratulado = partes[1] if len(partes) > 2 else ''
-            # N° Causa: buscar 'Causa_XXXX_' en el nombre del archivo
-            match_causa = re.search(r'Causa_(\d+)_', documento)
-            n_causa = match_causa.group(1) if match_causa else ''
-            # Fecha: buscar 'fecha_dd_mm_yyyy' en el nombre del archivo
-            match_fecha = re.search(r'fecha_(\d{2})_(\d{2})_(\d{4})', documento)
-            if match_fecha:
-                fecha = f"{match_fecha.group(1)}/{match_fecha.group(2)}/{match_fecha.group(3)}"
+        
+        for movimiento in movimientos:
+            # Determinar la clase CSS y el texto del documento
+            if movimiento.tiene_pdf():
+                doc_class = ""
+                doc_text = os.path.basename(movimiento.pdf_path)
             else:
-                fecha = ''
+                doc_class = "sin-pdf"
+                doc_text = "No hay PDF asociado"
+            
             html += f"""
                 <tr>
-                    <td>{documento}</td>
-                    <td>{seccion}</td>
-                    <td>{caratulado}</td>
-                    <td>{n_causa}</td>
-                    <td>{fecha}</td>
+                    <td>{movimiento.folio}</td>
+                    <td>{movimiento.seccion}</td>
+                    <td>{movimiento.caratulado}</td>
+                    <td>{movimiento.numero_causa}</td>
+                    <td>{movimiento.fecha}</td>
+                    <td class="{doc_class}">{doc_text}</td>
                 </tr>
             """
+        
         html += """
             </table>
         </body>
@@ -2249,7 +2266,7 @@ def construir_cuerpo_html(archivos_adjuntos):
         logging.error(f"Error construyendo cuerpo HTML: {str(e)}")
         return None
 
-def enviar_correo(archivos_adjuntos=None, asunto="Notificación de Sistema"):
+def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
     """Envía un correo electrónico con archivos adjuntos"""
     try:
         # Verificar credenciales
@@ -2263,25 +2280,26 @@ def enviar_correo(archivos_adjuntos=None, asunto="Notificación de Sistema"):
         msg['To'] = ", ".join(EMAIL_RECIPIENTS)
         msg['Subject'] = asunto
         
-        # Si no hay archivos adjuntos, enviar mensaje simple
-        if not archivos_adjuntos:
-            cuerpo = "No se encontraron nuevos documentos para adjuntar."
+        # Si no hay movimientos, enviar mensaje simple
+        if not movimientos:
+            cuerpo = "No se encontraron nuevos movimientos para reportar."
             msg.attach(MIMEText(cuerpo, 'plain'))
         else:
-            # Construir cuerpo HTML con metadata
-            html_cuerpo = construir_cuerpo_html(archivos_adjuntos)
+            # Construir cuerpo HTML con los movimientos
+            html_cuerpo = construir_cuerpo_html(movimientos)
             if html_cuerpo:
                 msg.attach(MIMEText(html_cuerpo, 'html'))
             
-            # Adjuntar archivos
-            for archivo in archivos_adjuntos:
-                try:
-                    with open(archivo, 'rb') as f:
-                        part = MIMEApplication(f.read(), Name=os.path.basename(archivo))
-                        part['Content-Disposition'] = f'attachment; filename="{os.path.basename(archivo)}"'
-                        msg.attach(part)
-                except Exception as e:
-                    logging.error(f"Error adjuntando archivo {archivo}: {str(e)}")
+            # Adjuntar solo los PDFs que existen
+            for movimiento in movimientos:
+                if movimiento.tiene_pdf():
+                    try:
+                        with open(movimiento.pdf_path, 'rb') as f:
+                            part = MIMEApplication(f.read(), Name=os.path.basename(movimiento.pdf_path))
+                            part['Content-Disposition'] = f'attachment; filename="{os.path.basename(movimiento.pdf_path)}"'
+                            msg.attach(part)
+                    except Exception as e:
+                        logging.error(f"Error adjuntando archivo {movimiento.pdf_path}: {str(e)}")
         
         # Enviar correo con reintentos
         max_intentos = 3
