@@ -643,7 +643,7 @@ class ControladorLupa:
                         random_sleep(1, 2)
                         
                         # Guardar la captura del panel
-                        detalle_panel_path = f"{subcarpeta}/Apelacion_Detalle_causa_{numero_causa}.png" if numero_causa else f"{subcarpeta}/Apelacion_Detalle_causa.png"
+                        detalle_panel_path = f"{subcarpeta}/Apelacion_{numero_causa}.png" if numero_causa else f"{subcarpeta}/Apelacion.png"
                         panel.screenshot(path=detalle_panel_path)
                         print(f"[INFO] Captura del panel de apelaciones guardada: {detalle_panel_path}")
                     else:
