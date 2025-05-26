@@ -58,7 +58,7 @@ USER_AGENTS = [
 ]
 
 class MovimientoPJUD:
-    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None, cuaderno=None, archivos_apelaciones=None):
+    def __init__(self, folio, seccion, caratulado, numero_causa, fecha, pdf_path=None, cuaderno=None, archivos_apelaciones=None, historia_causa_cuaderno=None):
         self.folio = folio
         self.seccion = seccion
         self.caratulado = caratulado
@@ -67,6 +67,7 @@ class MovimientoPJUD:
         self.pdf_path = pdf_path  # None si no hay PDF
         self.cuaderno = cuaderno  # Agregamos el cuaderno
         self.archivos_apelaciones = archivos_apelaciones or []  # Lista de archivos de apelaciones
+        self.historia_causa_cuaderno = historia_causa_cuaderno  # Agregamos el cuaderno de historia para Civil
     
     def tiene_pdf(self):
         return self.pdf_path is not None and os.path.exists(self.pdf_path)
@@ -83,7 +84,8 @@ class MovimientoPJUD:
             'fecha': self.fecha,
             'pdf_path': self.pdf_path,
             'cuaderno': self.cuaderno,
-            'archivos_apelaciones': self.archivos_apelaciones
+            'archivos_apelaciones': self.archivos_apelaciones,
+            'historia_causa_cuaderno': self.historia_causa_cuaderno
         }
     
     def __eq__(self, other):
@@ -1305,111 +1307,6 @@ class ControladorLupaCivil(ControladorLupa):
             'process_content': True
         }
 
-    def manejar(self, tab_name):
-        try:
-            print(f"  Procesando lupa tipo '{self.__class__.__name__}' en pestaña '{tab_name}'...")
-            lupas = self._obtener_lupas()
-            if not lupas:
-                print("  No se encontraron lupas en la pestaña.")
-                return False
-            
-            # Mejorar el manejo de lupas para Civil
-            for idx, lupa_link in enumerate(lupas):
-                try:
-                    fila = lupa_link.evaluate_handle('el => el.closest("tr")')
-                    tds = fila.query_selector_all('td')
-                    if len(tds) < 4:
-                        continue
-                    caratulado = tds[3].inner_text().strip().replace('/', '_')
-                    print(f"  Procesando lupa {idx+1} de {len(lupas)} (caratulado: {caratulado})")
-                    
-                    lupa_link.scroll_into_view_if_needed()
-                    random_sleep(0.5, 1)
-                    
-                    # Hacer clic en la lupa usando JavaScript
-                    self.page.evaluate("""
-                        (link) => {
-                            if (link && typeof link.click === 'function') {
-                                link.click();
-                                return true;
-                            } else {
-                                return false;
-                            }
-                        }
-                    """, lupa_link)
-                    
-                    random_sleep(2, 3)
-                    
-                    # Verificar si el modal está visible
-                    try:
-                        self._verificar_modal()
-                        print("  Modal abierto correctamente")
-                        
-                        # Verificar tabla y procesar contenido
-                        tabla_visible = self.page.evaluate("""
-                            () => {
-                                const tabla = document.querySelector("#modalDetalleMisCauCivil .modal-body table.table-bordered");
-                                return !!tabla && (tabla.offsetWidth > 0 && tabla.offsetHeight > 0);
-                            }
-                        """)
-                        
-                        if tabla_visible:
-                            print("  Tabla encontrada, procesando contenido...")
-                            movimientos_nuevos = self._procesar_contenido(tab_name, caratulado)
-                        else:
-                            print("  No se encontró la tabla visible")
-                    except Exception as modal_error:
-                        print(f"  Error al verificar modal o tabla: {str(modal_error)}")
-                        
-                    # Cerrar el modal
-                    self._cerrar_modal()
-                    
-                    # Solo procesar la primera lupa
-                    break
-                    
-                except Exception as e:
-                    print(f"  Error procesando la lupa {idx+1}: {str(e)}")
-                    self._manejar_error(e)
-                    continue
-                    
-            return True
-        except Exception as e:
-            self._manejar_error(e)
-            return False
-
-    def _obtener_opciones_cuaderno(self):
-        """Obtiene todas las opciones del dropdown de cuadernos"""
-        try:
-            print("  Obteniendo opciones del dropdown de cuadernos...")
-            
-            # Esperar a que el dropdown esté visible
-            self.page.wait_for_selector('#selCuaderno', timeout=5000)
-            
-            # Obtener opciones usando JavaScript
-            opciones = self.page.evaluate("""
-                () => {
-                    const select = document.querySelector('#selCuaderno');
-                    if (!select) return [];
-                    
-                    return Array.from(select.options).map(option => ({
-                        numero: option.value,
-                        texto: option.textContent.trim(),
-                        es_seleccionado: option.selected
-                    }));
-                }
-            """)
-            
-            if not opciones:
-                print("  No se encontraron opciones en el dropdown")
-                return []
-                
-            print(f"  Se encontraron {len(opciones)} opciones en el dropdown")
-            return opciones
-            
-        except Exception as e:
-            print(f"  Error al obtener opciones del dropdown: {str(e)}")
-            return []
-
     def _procesar_contenido(self, tab_name, caratulado):
         try:
             print(f"[INFO] Procesando movimientos en Civil...")
@@ -1649,7 +1546,8 @@ class ControladorLupaCivil(ControladorLupa):
                                     numero_causa=numero_causa,
                                     fecha=fecha_tramite_str,
                                     pdf_path=pdf_path,
-                                    cuaderno=texto  # Agregamos el nombre del cuaderno
+                                    cuaderno=texto,  # Agregamos el nombre del cuaderno
+                                    historia_causa_cuaderno=texto  # Agregamos el cuaderno de historia para Civil
                                 )
                                 if agregar_movimiento_sin_duplicar(movimiento_pjud):
                                     print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
@@ -1676,6 +1574,39 @@ class ControladorLupaCivil(ControladorLupa):
     def _cambiar_pestana_modal(self, caratulado, tab_name):
         # Civil no tiene subpestañas, por lo que no hacemos nada
         pass
+
+    def _obtener_opciones_cuaderno(self):
+        """Obtiene todas las opciones del dropdown de cuadernos"""
+        try:
+            print("  Obteniendo opciones del dropdown de cuadernos...")
+            
+            # Esperar a que el dropdown esté visible
+            self.page.wait_for_selector('#selCuaderno', timeout=5000)
+            
+            # Obtener opciones usando JavaScript
+            opciones = self.page.evaluate("""
+                () => {
+                    const select = document.querySelector('#selCuaderno');
+                    if (!select) return [];
+                    
+                    return Array.from(select.options).map(option => ({
+                        numero: option.value,
+                        texto: option.textContent.trim(),
+                        es_seleccionado: option.selected
+                    }));
+                }
+            """)
+            
+            if not opciones:
+                print("  No se encontraron opciones en el dropdown")
+                return []
+                
+            print(f"  Se encontraron {len(opciones)} opciones en el dropdown")
+            return opciones
+            
+        except Exception as e:
+            print(f"  Error al obtener opciones del dropdown: {str(e)}")
+            return []
 
 class ControladorLupaCobranza(ControladorLupa):
     def obtener_config(self):
@@ -1942,7 +1873,8 @@ class ControladorLupaCobranza(ControladorLupa):
                                     numero_causa=numero_causa,
                                     fecha=fecha_tramite_str,
                                     pdf_path=pdf_path,
-                                    cuaderno=texto  # Agregamos el nombre del cuaderno
+                                    cuaderno=texto,  # Agregamos el nombre del cuaderno
+                                    historia_causa_cuaderno=texto  # Agregamos el cuaderno de historia para Cobranza
                                 )
                                 if agregar_movimiento_sin_duplicar(movimiento_pjud):
                                     print(f"[INFO] Movimiento agregado exitosamente al diccionario global")
@@ -2319,6 +2251,15 @@ def construir_cuerpo_html(movimientos):
                     <li><strong>Sección:</strong> {movimiento.seccion}</li>
                     <li><strong>N° Causa:</strong> {movimiento.numero_causa}</li>
                     <li><strong>Caratulado:</strong> {movimiento.caratulado}</li>
+            """
+            
+            # Agregar Historia Causa Cuaderno para Civil y Cobranza
+            if (movimiento.seccion in ["Civil", "Cobranza"]) and movimiento.historia_causa_cuaderno:
+                html += f"""
+                    <li><strong>Historia Causa Cuaderno:</strong> {movimiento.historia_causa_cuaderno}</li>
+                """
+            
+            html += f"""
                     <li><strong>Fecha Trámite:</strong> {movimiento.fecha}</li>
                     <li><strong>Documento:</strong> {os.path.basename(movimiento.pdf_path) if movimiento.tiene_pdf() else '<span class="sin-pdf">No hay PDF asociado</span>'}</li>
             """
