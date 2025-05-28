@@ -1,15 +1,11 @@
+import time, random, os, re, smtplib, logging
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
-import time, random, os
-from datetime import datetime, timedelta
-import re
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-import logging
-from PyPDF2 import PdfReader
-import traceback
+
+
 
 # Configuración del logging
 logging.basicConfig(
@@ -32,17 +28,21 @@ SMTP_PORT = 587
 BASE_URL_PJUD = "https://oficinajudicialvirtual.pjud.cl/home/"
 
 # Listas y diccionarios para la navegación en PJUD
-MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", "Laboral", "Penal", "Cobranza", "Familia", "Disciplinario"]
+MIS_CAUSAS_TABS = ["Corte Suprema", "Corte Apelaciones", "Civil", 
+                   #"Laboral", "Penal", 
+                   "Cobranza", 
+                   #"Familia", "Disciplinario"
+                   ]
 
 # Diccionario de funciones JavaScript por pestaña
 TAB_FUNCTIONS = {
     "Corte Suprema": "buscSup",
     "Corte Apelaciones": "buscApe",
     "Civil": "buscCiv",
-    "Laboral": "buscLab",
+    #"Laboral": "buscLab",
     "Penal": "buscPen",
-    "Cobranza": "buscCob",
-    "Familia": "buscFam"
+    #"Cobranza": "buscCob",
+    #"Familia": "buscFam"
 }
 
 # Lista de user agents
@@ -2170,23 +2170,19 @@ def automatizar_poder_judicial(page, username, password):
 def construir_cuerpo_html(movimientos):
     if not movimientos:
         return """
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; }
-                .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-                .message { text-align: center; font-size: 18px; color: #666; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="message">
-                    <p>No hay nuevos movimientos para reportar en el Poder Judicial.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; }
+                </style>
+            </head>
+            <body>
+                <p>Estimado,</p>
+                <p>Junto con saludar y esperando que se encuentre muy bien, le informo que no se encontraron nuevos movimientos para reportar en el Poder Judicial.</p>
+                <p>Saludos cordiales</p>
+            </body>
+            </html>
+            """
 
     html = """
     <html>
@@ -2204,7 +2200,7 @@ def construir_cuerpo_html(movimientos):
     <body>
         <div class="container">
             <p>Estimado,</p>
-            <p>Junto con saludar y esperando que se encuentre muy bien, envío movimientos nuevos y su PDF asociado.</p>
+            <p>Junto con saludar y esperando que se encuentre muy bien, envío movimientos nuevos en el Poder Judicial y su PDF asociado.</p>
             <p>Detalle de documentos:</p>
     """
 
@@ -2226,15 +2222,15 @@ def construir_cuerpo_html(movimientos):
                     <li><strong>Documento:</strong> {os.path.basename(mov.pdf_path) if mov.pdf_path else 'No disponible'}</li>"""
 
         # Agregar Detalle Causa
-        if mov.seccion == "Corte Suprema":
-            html += f"""
-                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}.png</li>"""
-        elif mov.seccion == "Civil":
-            html += f"""
-                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
-        elif mov.seccion == "Cobranza":
-            html += f"""
-                    <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
+        #if mov.seccion == "Corte Suprema":
+        #    html += f"""
+        #            <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}.png</li>"""
+        #elif mov.seccion == "Civil":
+         #   html += f"""
+          #          <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
+        #elif mov.seccion == "Cobranza":
+        #    html += f"""
+        #            <li><strong>Detalle Causa:</strong> Detalle_causa_{mov.numero_causa}_Cuaderno_{mov.historia_causa_cuaderno}.png</li>"""
 
         # Agregar sección de Apelaciones si existe
         if mov.archivos_apelaciones:
@@ -2246,12 +2242,7 @@ def construir_cuerpo_html(movimientos):
             for archivo in mov.archivos_apelaciones:
                 html += f"""
                                     <li>{os.path.basename(archivo)}</li>"""
-            html += """
-                                </ul>
-                            </li>
-                            <li>Detalle Apelación: Apelacion_Detalle_causa_{mov.numero_causa}.png</li>
-                        </ul>
-                    </li>"""
+
 
         html += """
                 </ul>
@@ -2264,7 +2255,7 @@ def construir_cuerpo_html(movimientos):
     """
     return html
 
-def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
+def enviar_correo(movimientos=None, asunto="Notificación de Sistema de Poder Judicial"):
     """Envía un correo electrónico con archivos adjuntos"""
     try:
         # Verificar credenciales
@@ -2313,6 +2304,16 @@ def enviar_correo(movimientos=None, asunto="Notificación de Sistema"):
                     except Exception as e:
                         logging.error(f"Error adjuntando archivo {movimiento.pdf_path}: {str(e)}")
                 
+                 # Adjuntar archivos de apelaciones si existen
+                if movimiento.archivos_apelaciones:
+                    for archivo_apelacion in movimiento.archivos_apelaciones:
+                        try:
+                            with open(archivo_apelacion, 'rb') as f:
+                                part = MIMEApplication(f.read(), Name=os.path.basename(archivo_apelacion))
+                                part['Content-Disposition'] = f'attachment; filename="{os.path.basename(archivo_apelacion)}"'
+                                msg.attach(part)
+                        except Exception as e:
+                            logging.error(f"Error adjuntando archivo de apelación {archivo_apelacion}: {str(e)}")
             
         
         # Enviar correo con reintentos
