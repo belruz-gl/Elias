@@ -4,8 +4,11 @@ from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from pathlib import Path
 
-
+#Carga del env  
+dotenv_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=dotenv_path, override=True)
 
 # Configuración del logging
 logging.basicConfig(
@@ -2257,9 +2260,6 @@ def main():
     if is_weekend:
         logging.info("Hoy es fin de semana. No se realizan tareas.")
         return
-
-    # Carga el archivo .env
-    load_dotenv()
 
     # Obtiene las variables de entorno
     USERNAME = os.getenv("RUT")
